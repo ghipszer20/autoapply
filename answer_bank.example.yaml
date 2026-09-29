@@ -1,0 +1,5 @@
+# Copy to answer_bank.yaml (gitignored) and edit. Checked after profile fields, before the LLM.
+# pattern: case-insensitive regex matched against the question label. answer: text, true/false, or a list.
+entries:
+  - {pattern: 'languages? (do you )?speak|spoken languages?|fluent in', answer: English}
+  - {pattern: 'favorite programming language', answer: C++}

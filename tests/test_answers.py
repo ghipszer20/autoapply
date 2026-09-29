@@ -1,0 +1,228 @@
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from autoapply.answers import AnswerContext, BankEntry, DraftAnswer, Drafts, load_bank, resolve
+from autoapply.forms import FormField, FormSpec
+from autoapply.llm import LLMError
+from autoapply.profile import Profile
+
+PROFILE = Profile({
+    "identity": {"first_name": "Gavin", "middle_name": "Matthew", "last_name": "Hipszer", "preferred_name": "Gavin",
+                 "pronouns": "He/him", "email": "g@umd.edu", "phone": "(443) 555-0100",
+                 "github": "https://www.github.com/g", "linkedin": "https://www.linkedin.com/in/g",
+                 "address_permanent": {"street": "1 Main St", "city": "Catonsville", "state": "MD", "zip": "21228",
+                                       "country": "United States"},
+                 "address_school": {"street": "2 Knox Rd", "city": "College Park", "state": "MD", "zip": "20740",
+                                    "country": "United States"}},
+    "education": {"school": "University of Maryland, College Park", "degree": "Bachelor of Science",
+                  "major": "Applied Mathematics", "minor": "Computer Science", "gpa": 3.912,
+                  "class_standing": "Junior", "expected_graduation": "May 2028"},
+    "work_authorization": {"us_citizen": True, "authorized_to_work_in_us": True, "requires_sponsorship_now": False,
+                           "requires_sponsorship_future": False, "us_person_export_control": True,
+                           "security_clearance": "none", "clearance_eligible": True},
+    "availability": {"summer_2027": {"start": date(2027, 5, 24), "end": date(2027, 8, 20), "weeks": "10-12"},
+                     "interested_in_full_time_after_graduation": True},
+    "preferences": {"relocate": "anywhere_in_us", "work_mode_preference_order": ["on-site", "hybrid", "remote"],
+                    "salary_expectation": {"fallback_hourly_if_no_range": {"software": 22, "quant": 100}},
+                    "how_did_you_hear": {"select": "Other", "text": "Personal project"}},
+    "legal_and_checks": {"over_18": True, "background_check_consent": True, "drug_test_consent": True,
+                         "non_compete_or_non_solicit": False, "criminal_convictions": False,
+                         "previously_employed_by_any_company": False, "relatives_at_companies": False},
+    "eeo": {"gender": "Male", "race": ["White"], "hispanic_or_latino": False,
+            "veteran_status": "Not a protected veteran", "disability_status": "No disability",
+            "sexual_orientation": "Heterosexual", "transgender": False},
+})
+RESUME = Path("resume.pdf")
+
+
+class FakeLLM:
+    def __init__(self, drafts=None, error=None):
+        self.drafts = drafts or []
+        self.error = error
+        self.prompts: list[str] = []
+
+    def ask(self, prompt, schema, *, purpose, system, model=None):
+        self.prompts.append(prompt)
+        if self.error:
+            raise self.error
+        return Drafts(answers=self.drafts)
+
+
+def ctx(llm=None, bank=(), applied_before=False, cover=None):
+    return AnswerContext(profile=PROFILE, resume_pdf=RESUME, resume_text="Gavin Hipszer. C++ order book.",
+                         bank=list(bank), llm=llm, applied_before=lambda company: applied_before,
+                         cover_letter=cover, today=date(2026, 9, 29))
+
+
+def spec(*fields, description=""):
+    return FormSpec(company="Acme", title="SWE Intern", url="https://x", fields=list(fields), description=description)
+
+
+def F(id, label, type="text", required=True, options=(), **kw):
+    return FormField(id=id, label=label, type=type, required=required, options=tuple(options), **kw)
+
+
+YN = ("Yes", "No")
+
+
+def test_standard_fields():
+    r = resolve(spec(F("fn", "First Name"), F("ln", "Last Name"), F("em", "Email"), F("ph", "Phone"),
+                     F("li", "LinkedIn Profile", required=False), F("cv", "Resume/CV", "file"),
+                     F("sch", "School"), F("gpa", "GPA"), F("grad", "Expected graduation date")), ctx())
+    assert r.ok, r.skip_reason
+    v = {k: a.value for k, a in r.answers.items()}
+    assert v["fn"] == "Gavin" and v["ln"] == "Hipszer" and v["em"] == "g@umd.edu"
+    assert v["cv"] == RESUME and v["sch"] == "University of Maryland, College Park"
+    assert v["gpa"] == "3.91" and v["grad"] == "May 2028"
+    assert v["li"] == "https://www.linkedin.com/in/g"
+
+
+@pytest.mark.parametrize(("label", "options", "want"), [
+    ("Will you now or in the future require sponsorship for employment visa status (e.g. H-1B)?", YN, "No"),
+    ("Are you legally authorized to work in the United States?", YN, "Yes"),
+    ("Are you a U.S. citizen?", YN, "Yes"),
+    ("Are you a U.S. Person as defined by export control regulations (ITAR/EAR)?", YN, "Yes"),
+    ("Do you currently hold an active security clearance?", YN, "No"),
+    ("Are you eligible to obtain a security clearance?", YN, "Yes"),
+    ("Gender", ("Female", "Male", "Decline To Self Identify"), "Male"),
+    ("Are you Hispanic/Latino?", YN, "No"),
+    ("Race", ("Asian", "White", "Two or More Races", "Decline To Self Identify"), "White"),
+    ("Veteran Status", ("I am a veteran", "I am not a protected veteran", "I don't wish to answer"),
+     "I am not a protected veteran"),
+    ("Disability Status", ("Yes, I have a disability", "No, I do not have a disability", "I do not want to answer"),
+     "No, I do not have a disability"),
+    ("Are you at least 18 years of age?", YN, "Yes"),
+    ("Have you ever been convicted of a felony?", YN, "No"),
+    ("Have you previously been employed by Acme?", YN, "No"),
+    ("Are you subject to a non-compete agreement?", YN, "No"),
+    ("Do you have any relatives employed by the company?", YN, "No"),
+    ("Were you referred by a current employee?", YN, "No"),
+    ("Are you willing to relocate?", YN, "Yes"),
+])
+def test_sensitive_and_yes_no(label, options, want):
+    llm = FakeLLM()
+    r = resolve(spec(F("q", label, "select", options=options)), ctx(llm=llm))
+    assert r.ok, r.skip_reason
+    assert r.answers["q"].value == want
+    assert llm.prompts == []  # never reached the LLM
+
+
+def test_applied_before_uses_db():
+    s = spec(F("q", "Have you applied to Acme before?", "select", options=YN))
+    assert resolve(s, ctx(applied_before=True)).answers["q"].value == "Yes"
+    assert resolve(s, ctx(applied_before=False)).answers["q"].value == "No"
+
+
+def test_unmappable_sensitive_required_skips_without_llm():
+    llm = FakeLLM()
+    r = resolve(spec(F("q", "Gender", "select", options=("Option A", "Option B"))), ctx(llm=llm))
+    assert not r.ok and "Gender" in r.skip_reason
+    assert llm.prompts == []
+
+
+def test_unknown_attestation_required_skips():
+    r = resolve(spec(F("q", "Are you or a family member a government official?", "select", options=YN)), ctx(llm=FakeLLM()))
+    assert not r.ok
+
+
+def test_sensitive_optional_unmappable_left_blank():
+    r = resolve(spec(F("q", "Sexual orientation", "select", required=False, options=("A", "B"))), ctx())
+    assert r.ok and "q" not in r.answers and r.blank_optional == ["q"]
+
+
+def test_required_legal_checkbox_checked():
+    r = resolve(spec(F("c", "I certify that the information provided is true and complete", "checkbox")), ctx())
+    assert r.answers["c"].value is True
+
+
+def test_optional_marketing_checkbox_left_blank():
+    r = resolve(spec(F("c", "I agree to receive text messages about opportunities", "checkbox", required=False)), ctx())
+    assert "c" not in r.answers
+
+
+def test_bank_before_llm():
+    bank = [BankEntry(pattern=r"favorite language", answer="C++")]
+    llm = FakeLLM()
+    r = resolve(spec(F("q", "What is your favorite language?")), ctx(llm=llm, bank=bank))
+    assert r.answers["q"].value == "C++" and r.answers["q"].source == "bank"
+    assert llm.prompts == []
+
+
+def test_llm_drafts_free_text_and_select():
+    llm = FakeLLM([DraftAnswer(id="why", answer="Because of the order book work.", confidence=0.9),
+                   DraftAnswer(id="office", answer="New York", confidence=0.8)])
+    s = spec(F("why", "Why do you want to work at Acme?", "textarea"),
+             F("office", "Preferred office", "select", options=("Chicago", "New York")),
+             F("auth", "Are you legally authorized to work in the US?", "select", options=YN))
+    r = resolve(s, ctx(llm=llm))
+    assert r.ok, r.skip_reason
+    assert r.answers["why"].source == "llm" and r.answers["office"].value == "New York"
+    [prompt] = llm.prompts
+    assert "Why do you want" in prompt and "authorized" not in prompt
+
+
+def test_llm_unsure_required_skips():
+    llm = FakeLLM([DraftAnswer(id="q", answer="", confidence=0.0, unsure=True)])
+    r = resolve(spec(F("q", "Describe your experience with FPGA design")), ctx(llm=llm))
+    assert not r.ok and "unanswered" in r.skip_reason
+
+
+def test_llm_low_confidence_skips():
+    llm = FakeLLM([DraftAnswer(id="q", answer="maybe", confidence=0.3)])
+    assert not resolve(spec(F("q", "Describe a hard bug you fixed")), ctx(llm=llm)).ok
+
+
+def test_llm_select_answer_must_be_an_option():
+    llm = FakeLLM([DraftAnswer(id="q", answer="Boston", confidence=0.9)])
+    r = resolve(spec(F("q", "Preferred office", "select", options=("Chicago", "New York"))), ctx(llm=llm))
+    assert not r.ok
+
+
+def test_llm_answer_too_long_skips():
+    llm = FakeLLM([DraftAnswer(id="q", answer="x" * 50, confidence=0.9)])
+    assert not resolve(spec(F("q", "Short bio", max_length=20)), ctx(llm=llm)).ok
+
+
+def test_llm_error_skips_required():
+    r = resolve(spec(F("q", "Why us?", "textarea")), ctx(llm=FakeLLM(error=LLMError("down"))))
+    assert not r.ok and "llm" in r.skip_reason
+
+
+def test_no_llm_optional_free_text_blank():
+    r = resolve(spec(F("q", "Anything else?", "textarea", required=False)), ctx(llm=None))
+    assert r.ok and r.blank_optional == ["q"]
+
+
+def test_cover_letter_field_uses_generator():
+    r = resolve(spec(F("cl", "Cover Letter", "file", required=False)), ctx(cover=lambda s: Path("cl.pdf")))
+    assert r.answers["cl"].value == Path("cl.pdf")
+
+
+def test_unknown_required_file_skips():
+    assert not resolve(spec(F("f", "Writing sample", "file")), ctx()).ok
+
+
+def test_salary_text_na_and_number_from_range():
+    desc = "The pay range for this role is $40 - $50/hr."
+    r = resolve(spec(F("s", "What are your salary expectations?"), F("n", "Desired hourly pay", "number"),
+                     description=desc), ctx())
+    assert r.answers["s"].value == "N/A"
+    assert r.answers["n"].value == "45"
+
+
+def test_start_date_and_class_standing():
+    r = resolve(spec(F("sd", "Earliest start date", "date"),
+                     F("yr", "Current year in school", "select", options=("Freshman", "Sophomore", "Junior", "Senior"))),
+                ctx())
+    assert r.answers["sd"].value == "2027-05-24"
+    assert r.answers["yr"].value == "Junior"
+
+
+def test_load_bank(tmp_path):
+    p = tmp_path / "b.yaml"
+    p.write_text("entries:\n  - {pattern: 'favorite color', answer: blue}\n", encoding="utf-8")
+    [e] = load_bank(p)
+    assert e.answer == "blue"
+    assert load_bank(tmp_path / "missing.yaml") == []
