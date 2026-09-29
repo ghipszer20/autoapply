@@ -65,7 +65,7 @@ Phone (Claude app) ──Remote Control──► Claude Code session in repo ─
   - Commands: `discover`, `run --dry-run` (fills the form and screenshots it but doesn't submit), `on`, `off`, `status`, `digest` (today's submitted/skipped/manual counts with reasons), `manual` (lists third-party-only, CAPTCHA and failed postings with links).
 
 ### Scheduling and phone control
-- **Windows Task Scheduler** runs `autoapply run` every 30 minutes. Enable "wake the computer to run", and set the laptop power plan so it doesn't sleep while plugged in. The kill switch (the `state.enabled` flag) is checked before every submission.
+- **Windows Task Scheduler** runs `autoapply run` every 30 minutes. The action must be `pythonw.exe -m autoapply run` (windowless). Every `claude -p` subprocess uses `stdin=DEVNULL` and `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP`. A console-attached parent gets killed with 0xC000013A (see `docs/spikes/2026-09-29-spikes.md`). Enable "wake the computer to run", and set the laptop power plan so it doesn't sleep while plugged in. The kill switch (the `state.enabled` flag) is checked before every submission.
 - **Phone:** a Claude Code session started in the repo with `claude --remote-control`, with push notifications on in `/config`. The repo's `CLAUDE.md` tells that session how to handle "on", "off", "status" and "digest" requests: run the matching CLI command and summarize the result. It can also push a daily digest.
 - **Limit:** the PC must be on and the Remote Control session running for phone control to work. Scheduled runs don't depend on that session.
 
