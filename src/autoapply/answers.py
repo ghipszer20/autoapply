@@ -553,7 +553,8 @@ def _triggers_followup(value: Any) -> bool:
 # --- entry point -------------------------------------------------------------------------------------------
 
 
-def resolve(spec: FormSpec, ctx: AnswerContext) -> Resolution:
+def resolve(spec: FormSpec, ctx: AnswerContext, *, rules_only: bool = False) -> Resolution:
+    """rules_only: cheap pre-check (no LLM, no cover letter) that only reports rule-decided skips."""
     res = Resolution()
     unresolved: list[FormField] = []
     failed: list[FormField] = []
@@ -573,6 +574,9 @@ def resolve(spec: FormSpec, ctx: AnswerContext) -> Resolution:
     def by_rules(f: FormField, n: str) -> str:
         """'done' | 'failed' (never goes to the LLM) | 'open' (bank/LLM may answer)."""
         if f.type == "file":
+            if "cover" in n:
+                deferred.append(f)  # generated only once the application is known to go ahead
+                return "deferred"
             return "done" if settle(f, _file_rule(f, ctx, spec, n), "file") else "failed"
         if rule := _first_rule(SENSITIVE, n):
             return "done" if settle(f, rule(f, ctx, spec, n), "sensitive") else "failed"
@@ -585,6 +589,7 @@ def resolve(spec: FormSpec, ctx: AnswerContext) -> Resolution:
 
     prev: FormField | None = None
     conditional: set[str] = set()
+    deferred: list[FormField] = []
     for f in spec.fields:
         n = norm(f.label)
         parent, prev = prev, f
@@ -605,6 +610,13 @@ def resolve(spec: FormSpec, ctx: AnswerContext) -> Resolution:
             failed.append(f)
         elif outcome == "open":
             unresolved.append(f)
+
+    hard = next((f for f in failed if f.required), None)
+    if hard is not None:
+        res.skip_reason = f"unanswered: {hard.label[:80]}"
+        return res
+    if rules_only:
+        return res
 
     llm_error = None
     if unresolved and ctx.llm is not None:
@@ -632,5 +644,11 @@ def resolve(spec: FormSpec, ctx: AnswerContext) -> Resolution:
             res.skip_reason = f"{why}: {f.label[:80]}"
             return res
         if f.id not in res.blank_optional:
+            res.blank_optional.append(f.id)
+    for f in deferred:
+        if not settle(f, _file_rule(f, ctx, spec, norm(f.label)), "file"):
+            if f.required:
+                res.skip_reason = f"unanswered: {f.label[:80]}"
+                return res
             res.blank_optional.append(f.id)
     return res

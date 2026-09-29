@@ -277,3 +277,21 @@ def test_terms_ampersand_single_option():
     r = resolve(spec(F("t", "Terms & Conditions", "select",
                        options=("Yes, I have read and agree to DV Trading's privacy policy",))), ctx())
     assert r.ok and r.answers["t"].value.startswith("Yes")
+
+
+def test_rules_only_precheck_skips_without_llm_or_cover():
+    calls = []
+    llm = FakeLLM()
+    s = spec(F("g", "Gender", "select", options=("A", "B")), F("cl", "Cover Letter", "file", required=False),
+             F("why", "Why us?", "textarea"))
+    r = resolve(s, ctx(llm=llm, cover=lambda sp: calls.append(1) or Path("c.pdf")), rules_only=True)
+    assert not r.ok and llm.prompts == [] and calls == []
+    ok = resolve(spec(F("why", "Why us?", "textarea")), ctx(llm=llm), rules_only=True)
+    assert ok.ok and llm.prompts == []
+
+
+def test_cover_generated_only_when_application_proceeds():
+    calls = []
+    s = spec(F("cl", "Cover Letter", "file", required=False), F("q", "Why us?", "textarea"))
+    r = resolve(s, ctx(llm=FakeLLM([DraftAnswer(id="q", unsure=True)]), cover=lambda sp: calls.append(1) or Path("c.pdf")))
+    assert not r.ok and calls == []

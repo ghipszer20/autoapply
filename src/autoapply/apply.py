@@ -56,6 +56,11 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
     except AdapterError as e:
         return ApplyOutcome("failed", f"load: {e}")
     spec.meta["terms"] = terms
+    pre = resolve(spec, AnswerContext(profile=deps.profile, resume_pdf=deps.resume_settings.master_pdf,
+                                      resume_text=deps.master_text, bank=deps.bank, llm=None,
+                                      applied_before=deps.applied_before, today=today), rules_only=True)
+    if not pre.ok:  # decided by rules alone: spend no LLM calls on it
+        return ApplyOutcome("skipped", pre.skip_reason or "", form_url=spec.url)
     choice = choose_resume(deps.resume_settings, company=company, title=title, description=spec.description,
                            llm=deps.llm, today=today)
 
