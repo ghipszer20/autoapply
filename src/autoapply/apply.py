@@ -47,6 +47,18 @@ def _safe(key: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", key)[:120]
 
 
+def snap(page, path: Path) -> str:
+    """Best-effort record: full page, else the visible viewport, else nothing. Never stops an application."""
+    for full in (True, False):
+        try:
+            page.screenshot(path=str(path), full_page=full, timeout=20_000)
+            return str(path)
+        except Exception:  # noqa: BLE001 - tall pages can crash Chrome's full-page capture
+            if page.is_closed():
+                return ""
+    return ""
+
+
 def _audit(answers) -> dict[str, Any]:
     out = {}
     for fid, a in answers.items():
@@ -91,8 +103,9 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
     problems = adapter.fill(page, spec, res.answers)
     shot = deps.screenshot_dir / today.isoformat() / f"{_safe(key)}_{'live' if live else 'dry'}.png"
     shot.parent.mkdir(parents=True, exist_ok=True)
-    page.screenshot(path=str(shot), full_page=True)
-    base["screenshot"] = str(shot)
+    base["screenshot"] = snap(page, shot)
+    if page.is_closed():
+        return ApplyOutcome("failed", "browser tab closed before submit (nothing submitted)", **base)
     if problems:
         return ApplyOutcome("failed", "fill: " + "; ".join(problems[:4]), **base)
     if not live:
@@ -102,8 +115,7 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
     except Exception as e:  # noqa: BLE001 - the click may or may not have gone through
         result = SubmitResult("failed", f"submit error: {type(e).__name__}: {str(e)[:150]}")
     done = deps.screenshot_dir / today.isoformat() / f"{_safe(key)}_after_submit.png"
-    page.screenshot(path=str(done), full_page=True)
-    base["screenshot"] = str(done)
+    base["screenshot"] = snap(page, done) or base["screenshot"]
     if result.status == "failed":  # submit was clicked: never retry automatically (could apply twice)
         return ApplyOutcome("manual", f"unconfirmed submit, check screenshot: {result.detail}", **base)
     return ApplyOutcome(result.status, result.detail, **base)
@@ -116,9 +128,7 @@ def _apply_flow(page, adapter, *, key, url, company, title, terms, deps: ApplyDe
     cache: dict = {}
 
     def screenshot(tag: str) -> str:
-        path = shots / f"{_safe(key)}_{tag}.png"
-        page.screenshot(path=str(path), full_page=True)
-        return str(path)
+        return snap(page, shots / f"{_safe(key)}_{tag}.png")
 
     def answer(spec):
         spec.meta["terms"] = terms

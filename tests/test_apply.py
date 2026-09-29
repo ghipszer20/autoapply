@@ -11,8 +11,13 @@ from tests.test_answers import PROFILE
 
 
 class FakePage:
-    def screenshot(self, path, full_page=True):
+    closed = False
+
+    def screenshot(self, path, full_page=True, timeout=None):
         Path(path).write_bytes(b"png")
+
+    def is_closed(self):
+        return self.closed
 
 
 class FakeAdapter:
@@ -66,3 +71,26 @@ def test_unconfirmed_submit_is_final_manual(tmp_path):
 def test_screenshot_name_is_safe():
     from autoapply.apply import _safe
     assert _safe("url:https://camba.applytojob.com/apply/wv3/Intern") == "url_https_camba.applytojob.com_apply_wv3_Intern"
+
+
+class CrashyPage(FakePage):
+    def screenshot(self, path, full_page=True, timeout=None):
+        if full_page:
+            raise RuntimeError("renderer crashed")
+        Path(path).write_bytes(b"png")
+
+
+def test_screenshot_failure_never_stops_application(tmp_path):
+    ad = FakeAdapter(SubmitResult("submitted", "ok"))
+    o = apply_one(CrashyPage(), ad, key="fake:1", url="u", company="A", title="T", terms=(), deps=deps(tmp_path),
+                  live=True, today=date(2026, 9, 29))
+    assert o.status == "submitted" and o.screenshot.endswith(".png")
+
+
+def test_closed_tab_before_submit_is_retriable_failure(tmp_path):
+    page = FakePage()
+    page.closed = True
+    ad = FakeAdapter(SubmitResult("submitted"))
+    o = apply_one(page, ad, key="fake:1", url="u", company="A", title="T", terms=(), deps=deps(tmp_path), live=True,
+                  today=date(2026, 9, 29))
+    assert o.status == "failed" and not ad.submitted

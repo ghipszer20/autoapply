@@ -165,7 +165,12 @@ def run_cycle(cfg: Config, conn: sqlite3.Connection, *, live: bool, limit: int |
                     break
                 examined += 1
                 key_holder["key"] = row["key"]
-                page = ctx.new_page()
+                try:
+                    page = ctx.new_page()
+                except Exception:  # noqa: BLE001 - window was closed: start a fresh browser
+                    close()
+                    ctx, close = _open_browser(p, live=live, headed=headed)
+                    page = ctx.new_page()
                 try:
                     import json
 
