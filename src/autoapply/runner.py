@@ -174,7 +174,7 @@ def run_cycle(cfg: Config, conn: sqlite3.Connection, *, live: bool, limit: int |
                                       form_url=outcome.form_url, answers=outcome.answers)
                 rep.outcomes.append((row["key"], outcome))
                 rep.add(f"{status:9} {company} | {row['title']} | {outcome.reason[:140]}")
-                if status in ("skipped", "deferred"):
+                if status in ("skipped", "deferred", "closed"):
                     if budget_hit:
                         rep.add("LLM daily budget used up; stopping")
                         break

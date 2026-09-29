@@ -45,6 +45,10 @@ class AdapterError(Exception):
     """The page did not look like the form we expected (layout change, closed posting, ...)."""
 
 
+class PostingClosed(AdapterError):
+    """The job is no longer accepting applications; never retried."""
+
+
 @dataclass
 class SubmitResult:
     status: Literal["submitted", "failed", "manual"]

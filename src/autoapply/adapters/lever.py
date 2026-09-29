@@ -9,7 +9,7 @@ import httpx
 
 from ..answers import Resolved
 from ..forms import FormField, FormSpec
-from .base import AdapterError, SubmitResult, best_option, query_for, real_options
+from .base import AdapterError, PostingClosed, SubmitResult, best_option, query_for, real_options
 
 _URL = re.compile(r"jobs\.lever\.co/([^/?#]+)/([0-9a-f-]{36})")
 
@@ -102,7 +102,7 @@ class LeverAdapter:
         target = self.form_url(url, key)
         resp = page.goto(target, wait_until="domcontentloaded", timeout=60_000)
         if resp is not None and resp.status >= 400:
-            raise AdapterError(f"HTTP {resp.status} for {target} (closed posting?)")
+            raise PostingClosed(f"HTTP {resp.status} for {target}")
         try:
             page.wait_for_selector("form .application-question", timeout=20_000)
         except Exception as e:

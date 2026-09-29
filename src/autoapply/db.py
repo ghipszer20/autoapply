@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS events (
     detail TEXT
 );
 """
-FINAL_STATUSES = ("submitted", "skipped", "manual")
+FINAL_STATUSES = ("submitted", "skipped", "manual", "closed")
 MAX_ATTEMPTS = 2
 
 

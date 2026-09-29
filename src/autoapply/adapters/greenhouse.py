@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..answers import Resolved
 from ..forms import FormField, FormSpec
-from .base import AdapterError, SubmitResult, best_option, query_for, real_options, settle
+from .base import AdapterError, PostingClosed, SubmitResult, best_option, query_for, real_options, settle
 
 # Education block and other system fields have terse labels; give the resolver unambiguous ones.
 LABEL_OVERRIDES = [
@@ -141,9 +141,13 @@ class GreenhouseAdapter:
         resp = page.goto(target, wait_until="domcontentloaded", timeout=60_000)
         if resp is not None and resp.status >= 400:
             raise AdapterError(f"HTTP {resp.status} for {target}")
+        if "error=true" in page.url:
+            raise PostingClosed(f"greenhouse redirected to the job board ({page.url})")
         try:
             page.wait_for_selector("#application-form, form#application_form", timeout=20_000)
         except Exception as e:
+            if "error=true" in page.url:
+                raise PostingClosed(f"no longer open ({page.url})") from e
             raise AdapterError(f"no application form at {page.url} (closed posting?)") from e
         settle(page)
         form = page.query_selector("#application-form") or page.query_selector("form#application_form")

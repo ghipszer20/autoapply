@@ -10,7 +10,7 @@ import httpx
 
 from ..answers import Resolved
 from ..forms import FormField, FormSpec
-from .base import AdapterError, SubmitResult, best_option, query_for, real_options, settle
+from .base import AdapterError, PostingClosed, SubmitResult, best_option, query_for, real_options, settle
 
 GRAPHQL = "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobPosting"
 QUERY = """query ApiJobPosting($organizationHostedJobsPageName: String!, $jobPostingId: String!) {
@@ -71,7 +71,7 @@ def fetch_job(client: httpx.Client, org: str, job_id: str) -> dict:
     data = resp.json()
     job = (data.get("data") or {}).get("jobPosting")
     if not job:
-        raise AdapterError(f"ashby posting {org}/{job_id} not found (closed?) {data.get('errors', '')}")
+        raise PostingClosed(f"ashby posting {org}/{job_id} not found {data.get('errors', '')}")
     return job
 
 

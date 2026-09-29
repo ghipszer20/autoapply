@@ -9,7 +9,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from .adapters.base import Adapter, AdapterError
+from .adapters.base import Adapter, AdapterError, PostingClosed
 from .answers import AnswerContext, BankEntry, resolve
 from .profile import Profile
 from .resume.cover import write_cover_letter
@@ -56,6 +56,8 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
                            live=live, today=today)
     try:
         spec = adapter.load(page, url, key, company, title)
+    except PostingClosed as e:
+        return ApplyOutcome("closed", str(e))
     except AdapterError as e:
         return ApplyOutcome("failed", f"load: {e}")
     spec.meta["terms"] = terms
