@@ -7,7 +7,7 @@ session from the Claude mobile app through Remote Control. Keep replies to one o
 Run commands from the repo root with `.venv/Scripts/autoapply`:
 - "on" / "start" / "resume": run `.venv/Scripts/autoapply on`, then `.venv/Scripts/autoapply status`
 - "off" / "stop" / "pause": run `.venv/Scripts/autoapply off`, then `.venv/Scripts/autoapply status`
-- "status" / "how's it going": run `.venv/Scripts/autoapply status` and summarize in one line
+- "status" / "how's it going": run `.venv/Scripts/autoapply status` and summarize in one line. If it says GMAIL SIGN-IN EXPIRED, say so first: the user must run `autoapply gmail-auth` at the PC
 - "digest" / "what did you apply to today": run `.venv/Scripts/autoapply digest` and summarize
   (counts per status, then the submitted companies)
 - "manual" / "what needs me": run `.venv/Scripts/autoapply manual` and list the first 10 lines

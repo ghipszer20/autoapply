@@ -198,6 +198,13 @@ def credentials():
     return creds if creds.valid else None
 
 
+def gmail_state() -> str:
+    """'not set up' | 'ok' | 'expired' (Testing-mode Google apps: sign-in lasts 7 days)."""
+    if not TOKEN.exists():
+        return "not set up"
+    return "ok" if credentials() is not None else "expired"
+
+
 def authorize() -> None:
     """Interactive, run once by the user: opens a browser for Google consent (read-only Gmail)."""
     from google_auth_oauthlib.flow import InstalledAppFlow

@@ -56,6 +56,8 @@ Tenants that email a verification link need Gmail set up (below); otherwise they
 1. Google Cloud Console -> create a project -> enable the Gmail API -> OAuth consent screen (External, add
    yourself as a test user) -> Credentials -> OAuth client ID -> *Desktop app* -> download JSON.
 2. Save it as `data/gmail_credentials.json`, then run `.venv/Scripts/autoapply gmail-auth` once (read-only scope).
+   The app stays in Google's "Testing" mode, so the sign-in lasts 7 days: when `status` says
+   GMAIL SIGN-IN EXPIRED, run `autoapply gmail-auth` again (about 20 seconds).
 Alert jobs are matched to the company's own Greenhouse/Lever/Ashby posting; unmatched ones go to `manual`.
 
 ## Phone control

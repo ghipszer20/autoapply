@@ -51,6 +51,13 @@ def _status(conn: sqlite3.Connection) -> None:
     print(f"last discover: {db.get_state(conn, 'last_discover', 'never')}")
     print(f"postings: {c['total']} total, {c['eligible']} eligible")
     print("today: " + (", ".join(f"{k} {v}" for k, v in sorted(d.items())) or "nothing yet"))
+    from .sources.email_alerts import gmail_state
+
+    gm = gmail_state()
+    if gm == "expired":
+        print("GMAIL SIGN-IN EXPIRED: run `autoapply gmail-auth` at the PC (weekly; security codes + alerts paused)")
+    elif gm == "ok":
+        print("gmail: connected")
     waiting = len(db.assist_queue(conn, 1000))
     if waiting:
         print(f"waiting for you: {waiting} (run `autoapply assist` at the PC; it fills, you click Submit)")

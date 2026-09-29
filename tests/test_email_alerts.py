@@ -72,3 +72,14 @@ def test_greenhouse_code_pattern():
     assert find_security_code(body) == "aB3dE9fG"
     assert find_security_code("Your security code for the complete application is below: X7K2M9QP") == "X7K2M9QP"
     assert find_security_code("no code here") is None
+
+
+def test_gmail_state(monkeypatch, tmp_path):
+    from autoapply.sources import email_alerts
+    monkeypatch.setattr(email_alerts, "TOKEN", tmp_path / "none.json")
+    assert email_alerts.gmail_state() == "not set up"
+    tok = tmp_path / "t.json"
+    tok.write_text("{}")
+    monkeypatch.setattr(email_alerts, "TOKEN", tok)
+    monkeypatch.setattr(email_alerts, "credentials", lambda: None)
+    assert email_alerts.gmail_state() == "expired"
