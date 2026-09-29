@@ -356,7 +356,9 @@ SENSITIVE: list[Rule] = [
     (_r(r"veteran|military|armed forces"), _eeo("veteran_status")),
     (_r(r"disabilit"), _eeo("disability_status")),
     # attestations the profile has no answer for: never let the LLM decide
-    (_r(r"government official|public official|politically exposed|debarred|sanction|social security|\bssn\b|"
+    (_r(r"government official|public official|politically exposed|government employee"),
+     _p("legal_and_checks.government_official_self_or_family")),
+    (_r(r"debarred|sanction|social security|\bssn\b|"
         r"date of birth|\bdob\b|^age$|what is your age|how old"), lambda f, c, s, n: _notice_or_unanswerable(f, c, s, n)),
     (_r(r"18 years|at least 18|over 18|age of 18|legal age|\b18 or older"), _p("legal_and_checks.over_18")),
     (_r(r"background (check|screen|investigation)"), _p("legal_and_checks.background_check_consent")),
@@ -560,7 +562,68 @@ def _work_mode(f, c, s, n):
     return True  # "are you comfortable working on-site/hybrid?" -> all modes acceptable
 
 
+_LOCAL = re.compile(r"\b(md|maryland|dc|d c|washington dc|washington d c|district of columbia|baltimore|arlington|"
+                    r"alexandria|mclean|reston|herndon|tysons|fairfax|chantilly|columbia md|college park|bethesda|"
+                    r"rockville|silver spring|annapolis|crystal city)\b")
+
+
+def _housing(f, c, s, n):
+    if c.profile.get("availability.housing") != "needed_unless_local":
+        return None
+    locs = " ".join(s.meta.get("locations") or ())
+    if not locs:
+        return UNANSWERABLE if f.required else BLANK  # can't tell whether the office is local
+    return not bool(_LOCAL.search(norm(locs)))
+
+
+def _hours(f, c, s, n):
+    part_time = re.search(r"semester|school year|academic year|part time|during (the )?(school|semester)|while (in|attending)",
+                          n)
+    val = c.profile.get("availability.part_time_hours_per_week" if part_time else "availability.full_time_hours_per_week")
+    if val is None:
+        return None
+    text = str(val)
+    if f.type == "number":
+        return re.findall(r"\d+", text)[-1]  # "15-20" -> 20 (upper bound of what is available)
+    return Choice(text, (text, text.replace("-", " - "), f"{text} hours"))
+
+
+def _skill_rating(f, c, s, n):
+    ratings = {k.lower(): v for k, v in (c.profile.get("skills_self_rating") or {}).items() if isinstance(v, str)}
+    hits = [k for k in ratings if re.search(rf"(?<![a-z+#]){re.escape(k)}(?![a-z+#])", n)]
+    if len(hits) != 1:
+        return None  # several skills in one question: let the resolver/LLM see it whole
+    level = ratings[hits[0]]
+    return Choice(level, (level, {"Intermediate": "moderate", "Beginner": "basic", "Advanced": "expert"}.get(level, level)))
+
+
+def _previous_internship(f, c, s, n):
+    if c.profile.get("experience.previous_internships") not in ("none", None, False):
+        return None
+    if f.type == "textarea" or "detail" in n or "describe" in n:
+        return ("No prior internships yet. My experience is undergraduate research (NVIDIA 6G Development Program, "
+                "FIRE Research Program) and personal projects such as my C++ limit order book.")
+    return False
+
+
+def _offers(f, c, s, n):
+    if c.profile.get("experience.current_offers") not in ("none", None, False):
+        return None
+    if f.options and pick_bool(f.options, False) is None:
+        opt = pick(f.options, ("none", "no", "no offers", "not applicable", "n a"))
+        return Choice(opt, (opt,)) if opt else None
+    return False if f.type != "textarea" else "No, I don't have any offers or offer deadlines right now."
+
+
 STANDARD: list[Rule] = [
+    (_r(r"housing"), _housing),
+    (_r(r"interview"), lambda f, c, s, n: c.profile.get("availability.interview_availability")
+     if re.search(r"availab|window|times?\b|schedule|when", n) else None),
+    (_r(r"hours (per|a|each) week|weekly hours|hours per wk"), _hours),
+    (_r(r"proficiency|skill level|experience level|rate your|how would you rate|comfort (level )?with"), _skill_rating),
+    (_r(r"(previous|prior|past) internship|completed .{0,30}internship|internship experience"), _previous_internship),
+    (_r(r"offer deadline|other offers?|competing offers?|pending offers?|upcoming offer|any offers"), _offers),
+    (_r(r"summer 2026"), lambda f, c, s, n: c.profile.get("experience.summer_2026")),
     (_r(r"^(legal )?first name|given name|^first$"), _p("identity.first_name")),
     (_r(r"^(legal )?last name|surname|family name|^last$"), _p("identity.last_name")),
     (_r(r"middle name"), _p("identity.middle_name")),
@@ -647,8 +710,8 @@ SYSTEM = (
     "unsure=false. If a question cannot be answered truthfully from FACTS, set unsure=true. confidence is 0-1."
 )
 
-_FACT_KEYS = ("education", "availability", "preferences.relocate", "preferences.work_modes", "languages",
-              "skills_self_rating", "essays")
+_FACT_KEYS = ("education", "availability", "experience", "preferences.relocate", "preferences.work_modes",
+              "languages", "skills_self_rating")
 
 
 def _facts(c: AnswerContext) -> str:

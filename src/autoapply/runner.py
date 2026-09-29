@@ -171,7 +171,8 @@ def run_cycle(cfg: Config, conn: sqlite3.Connection, *, live: bool, limit: int |
 
                     outcome = apply_one(page, all_adapters[row["ats"]], key=row["key"], url=row["url"],
                                         company=company, title=row["title"], terms=tuple(json.loads(row["terms"])),
-                                        deps=deps, live=live, today=today)
+                                        deps=deps, live=live, today=today,
+                                        locations=tuple(json.loads(row["locations"])))
                 except Exception as e:  # noqa: BLE001 - one bad page must not end the pass
                     outcome = ApplyOutcome("failed", f"crash: {type(e).__name__}: {str(e)[:200]}")
                 finally:

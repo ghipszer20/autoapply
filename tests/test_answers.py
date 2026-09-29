@@ -123,7 +123,7 @@ def test_unmappable_sensitive_required_skips_without_llm():
 
 
 def test_unknown_attestation_required_skips():
-    r = resolve(spec(F("q", "Are you or a family member a government official?", "select", options=YN)), ctx(llm=FakeLLM()))
+    r = resolve(spec(F("q", "Please provide your social security number")), ctx(llm=FakeLLM()))
     assert not r.ok
 
 
@@ -480,3 +480,41 @@ def test_legal_authorization_region():
     r = resolve(spec(F("a", "Do you have legal authorization to work in the geographic region specified for this role?",
                        "select", options=YN)), ctx())
     assert r.answers["a"].value == "Yes"
+
+
+PROFILE.data["availability"].update({"part_time_hours_per_week": "15-20", "full_time_hours_per_week": 40,
+                                     "interview_availability": "Weekday afternoons after 2pm ET",
+                                     "housing": "needed_unless_local"})
+PROFILE.data["experience"] = {"previous_internships": "none", "summer_2026": "Research and projects; no internship.",
+                              "current_offers": "none"}
+PROFILE.data["legal_and_checks"]["government_official_self_or_family"] = False
+PROFILE.data["skills_self_rating"] = {"Excel": "Intermediate", "SQL": "Intermediate", "Python": "Intermediate"}
+
+
+def test_new_profile_facts():
+    s = spec(F("g", "Are you or any family member a government official or politically exposed person?", "select",
+               options=YN),
+             F("o", "Do you have any, or anticipate any upcoming offer deadlines?", "select", options=YN),
+             F("p", "Have you completed at least one previous internship? Please provide details.", "textarea"),
+             F("s", "Where are you spending summer 2026?"),
+             F("i", "Is there a window of time for interviews Monday - Friday that works best?"),
+             F("hp", "How many hours per week can you work during the semester?", "number"),
+             F("hf", "How many hours per week can you work during the internship?", "number"),
+             F("x", "What is your proficiency with Microsoft Excel", "select",
+               options=("Beginner", "Intermediate", "Advanced")))
+    r = resolve(s, ctx())
+    assert r.ok, r.skip_reason
+    v = {k: a.value for k, a in r.answers.items()}
+    assert v["g"] == "No" and v["o"] == "No" and v["p"].startswith("No prior internships")
+    assert "no internship" in v["s"] and v["i"].startswith("Weekday afternoons")
+    assert v["hp"] == "20" and v["hf"] == "40" and v["x"] == "Intermediate"
+
+
+def test_housing_depends_on_location():
+    q = F("h", "If you are hired as a summer intern will you need housing?", "select", options=YN)
+    far = spec(q)
+    far.meta["locations"] = ("Austin, TX",)
+    near = spec(q)
+    near.meta["locations"] = ("Washington, DC",)
+    assert resolve(far, ctx()).answers["h"].value == "Yes"
+    assert resolve(near, ctx()).answers["h"].value == "No"

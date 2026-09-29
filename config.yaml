@@ -5,11 +5,11 @@ filter:
   title_include:                                          # at least one must match (case-insensitive)
     - 'software|\bswe\b|developer|engineer|programm'
     - 'data|machine learning|\bml\b|\bai\b|artificial intelligence|analytics'
+    - '\bquant|\btrader\b|\btrading\b'                    # quant research + trading (user, 2026-09-29)
   title_exclude:                                          # any match rejects
     - '\bph\.?d\b|\bmasters?\b|master''s|\bmba\b'
     - 'hardware|mechanical|electrical|civil|chemical|manufacturing|\basic\b|\bfpga\b|\brf\b'
     - 'product manag|program manag|\bsales\b|marketing|recruit|designer|\bux\b'
-    - '\btrader\b|trading intern'
   require_bachelors: true
   us_only: true
   us_citizen: true

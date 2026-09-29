@@ -110,7 +110,8 @@ def _cmd_apply(args, conn) -> int:
         try:
             page = ctx.new_page()
             o = apply_one(page, adapters()[row["ats"]], key=row["key"], url=row["url"], company=row["company"],
-                          title=row["title"], terms=tuple(json.loads(row["terms"])), deps=deps, live=args.live)
+                          title=row["title"], terms=tuple(json.loads(row["terms"])), deps=deps, live=args.live,
+                          locations=tuple(json.loads(row["locations"])))
         finally:
             close()
     db.record_application(conn, row["key"], o.status, o.reason, now=datetime.now().astimezone(),

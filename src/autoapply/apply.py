@@ -56,11 +56,12 @@ def _audit(answers) -> dict[str, Any]:
 
 
 def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title: str, terms: tuple[str, ...],
-              deps: ApplyDeps, live: bool, today: date | None = None) -> ApplyOutcome:
+              deps: ApplyDeps, live: bool, today: date | None = None,
+              locations: tuple[str, ...] = ()) -> ApplyOutcome:
     today = today or date.today()
     if hasattr(adapter, "apply_flow"):  # multi-page systems (Workday)
         return _apply_flow(page, adapter, key=key, url=url, company=company, title=title, terms=terms, deps=deps,
-                           live=live, today=today)
+                           live=live, today=today, locations=locations)
     try:
         spec = adapter.load(page, url, key, company, title)
     except PostingClosed as e:
@@ -68,6 +69,7 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
     except AdapterError as e:
         return ApplyOutcome("failed", f"load: {e}")
     spec.meta["terms"] = terms
+    spec.meta["locations"] = locations
     pre = resolve(spec, AnswerContext(profile=deps.profile, resume_pdf=deps.resume_settings.master_pdf,
                                       resume_text=deps.master_text, bank=deps.bank, llm=None,
                                       applied_before=deps.applied_before, today=today), rules_only=True)
@@ -108,7 +110,7 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
 
 
 def _apply_flow(page, adapter, *, key, url, company, title, terms, deps: ApplyDeps, live: bool,
-                today: date) -> ApplyOutcome:
+                today: date, locations: tuple[str, ...] = ()) -> ApplyOutcome:
     shots = deps.screenshot_dir / today.isoformat()
     shots.mkdir(parents=True, exist_ok=True)
     cache: dict = {}
@@ -120,6 +122,7 @@ def _apply_flow(page, adapter, *, key, url, company, title, terms, deps: ApplyDe
 
     def answer(spec):
         spec.meta["terms"] = terms
+        spec.meta["locations"] = locations
         if "choice" not in cache:
             cache["choice"] = choose_resume(deps.resume_settings, company=company, title=title,
                                             description=spec.description, llm=deps.llm, today=today)
