@@ -1,4 +1,4 @@
-# autoapply — operating instructions for Claude Code sessions
+# autoapply â€” operating instructions for Claude Code sessions
 
 This repo runs an automatic internship-application pipeline. The user usually talks to this
 session from the Claude mobile app through Remote Control. Keep replies to one or two short lines.
