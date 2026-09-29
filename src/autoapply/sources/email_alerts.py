@@ -240,3 +240,25 @@ def fetch(client: httpx.Client, now: datetime, *, conn: sqlite3.Connection | Non
             if (p := resolve(job, conn, client)) is not None:
                 out.append(p)
     return out
+
+
+_VERIFY_LINK = re.compile(r"https://[a-z0-9.-]*myworkday(?:jobs|site)?\.com/[^\s\"'<>]*(?:verify|activate|confirm)[^\s\"'<>]*",
+                          re.I)
+
+
+def workday_verification_link(tenant: str, *, wait_seconds: int = 90, sleep=None) -> str | None:
+    """Poll Gmail for the tenant's 'verify your account' email and return its link (None if Gmail isn't set up)."""
+    import time
+
+    sleep = sleep or time.sleep
+    creds = credentials()
+    if creds is None:
+        return None
+    with httpx.Client(timeout=30) as client:
+        for _ in range(max(1, wait_seconds // 10)):
+            for msg in recent_messages(client, creds.token, "newer_than:1h (from:myworkday.com OR from:workday.com)", 10):
+                m = _VERIFY_LINK.search(_html_of(msg.get("payload", {})))
+                if m and tenant.lower() in m.group(0).lower():
+                    return m.group(0).replace("&amp;", "&")
+            sleep(10)
+    return None

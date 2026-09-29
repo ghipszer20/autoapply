@@ -36,7 +36,10 @@ def adapters() -> dict:
     from .adapters.workday import WorkdayAdapter
 
     out["lever"] = LeverAdapter()
-    out["workday"] = WorkdayAdapter()  # pilot: only used when "workday" is in run.ats_enabled or passed via --ats
+    from .sources.email_alerts import workday_verification_link
+
+    # pilot: only used when "workday" is in run.ats_enabled or passed via --ats
+    out["workday"] = WorkdayAdapter(email_code=workday_verification_link)
     from .adapters.generic import HOSTS, GenericAdapter
 
     generic = GenericAdapter()

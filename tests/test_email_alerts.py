@@ -58,3 +58,9 @@ def test_html_of_nested_parts():
     payload = {"mimeType": "multipart/alternative", "parts": [
         {"mimeType": "text/plain", "body": {"data": "eA"}}, {"mimeType": "text/html", "body": {"data": data}}]}
     assert _html_of(payload) == "<p>hi</p>"
+
+
+def test_workday_verify_link_pattern():
+    from autoapply.sources.email_alerts import _VERIFY_LINK
+    html = '<a href="https://fox.wd1.myworkdayjobs.com/domestic/activate/abc123?redirect=x">Verify Account</a>'
+    assert _VERIFY_LINK.search(html).group(0) == "https://fox.wd1.myworkdayjobs.com/domestic/activate/abc123?redirect=x"
