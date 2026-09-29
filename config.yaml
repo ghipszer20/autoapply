@@ -39,7 +39,7 @@ llm:                       # all LLM work goes through `claude -p` on the subscr
   purpose_models: {answers: sonnet, cover: sonnet, tailor: sonnet}   # writing that goes out under your name
 
 resume:
-  master_pdf: 'C:\Users\24GHi\Downloads\Hipszer_resume_fall2026.pdf'
+  master_pdf: 'C:\Users\24GHi\Downloads\Hipszer_Resume_Fall_2026.pdf'
   master_yaml: resume.yaml           # gitignored; set verified: true to allow tailoring
   out_dir: 'C:\Users\24GHi\Downloads\autoapply_resumes'
   tailor_threshold: 70               # fit score at/above this uses the master PDF unchanged
