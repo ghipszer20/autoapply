@@ -24,6 +24,8 @@ from .profile import Profile
 from .resume.verify import verify_text
 
 MIN_CONFIDENCE = 0.6
+CONFIRM_ELIGIBLE = re.compile(r"^(please )?confirm (that )?you (are|have|will be|were|attend|are enrolled)|"
+                              r"^are you (a )?(part|member) of (the )?\w+ (scholars?|program|fellowship)")
 OVERCLAIM = re.compile(r"\b(proficien\w*|expert(ise)?|extensive(ly)?|mastery|years of (experience|professional)|"
                        r"(strong|solid|deep|advanced) (experience|background|knowledge|skills?|proficiency))\b", re.I)
 CONDITIONAL = re.compile(r"^(if (you )?(selected|answered|chose|checked|picked|indicated)\b|if (yes|so|other|applicable)\b|"
@@ -452,7 +454,10 @@ def _month_year(f: FormField, n: str, text: str) -> Any:
         return Choice(year, (year,))
     if f.type == "date":
         return f"{year}-{_MONTHS.index(month) + 1:02d}-15"
-    return Choice(text, (text, f"{month[:3]} {year}", year))
+    season = {"January": "Winter", "February": "Winter", "March": "Spring", "April": "Spring", "May": "Spring",
+              "June": "Summer", "July": "Summer", "August": "Summer", "September": "Fall", "October": "Fall",
+              "November": "Fall", "December": "Fall"}.get(month, "")
+    return Choice(text, (text, f"{month[:3]} {year}", f"{season} {year}", f"{season} '{year[2:]}", year))
 
 
 def _graduation(f, c, s, n):
@@ -518,8 +523,19 @@ def _class_standing(f, c, s, n):
 def _hear(f, c, s, n):
     h = c.profile.get("preferences.how_did_you_hear") or {}
     if f.type in ("select", "radio", "multiselect"):
-        return Choice(h.get("select", "Other"), (h.get("select", "Other"), "other", "job board", "online job board",
-                                                 "job posting", "internet", "website", "online"))
+        # exact generic answers first; "Other conferences or events" style categories would be untrue
+        exact = [o for o in f.options if norm(o) in ("other", "other please specify", "other please describe",
+                                                      "job board", "online job board", "job posting", "internet",
+                                                      "internet search", "google", "search engine", "online",
+                                                      "company website", "website", "github")]
+        if exact:
+            order = ["other", "other please specify", "other please describe", "job board", "online job board",
+                     "job posting", "internet search", "internet", "search engine", "google", "online", "github",
+                     "company website", "website"]
+            best = min(exact, key=lambda o: order.index(norm(o)))
+            return Choice(best, (best,))
+        return Choice(h.get("select", "Other"), (h.get("select", "Other"), "other please", "other ", "job board",
+                                                 "online job board", "job posting", "internet", "website", "online"))
     return h.get("text")
 
 
@@ -668,7 +684,10 @@ STANDARD: list[Rule] = [
         r"referral source|how were you referred"), _hear),
     (_r(r"relocat"), lambda f, c, s, n: c.profile.get("preferences.relocate") not in (None, False, "no")),
     (_r(r"salary|compensation|pay (expectation|requirement)|desired (pay|rate)|hourly (rate|pay)|expected pay"), _salary),
-    (_r(r"on site|onsite|in office|in person|hybrid|remote|work (mode|arrangement|location preference)"), _work_mode),
+    (_r(r"work (mode|arrangement|location preference|environment preference)|"
+        r"(willing|able|comfortable|open) to work .{0,40}(on site|onsite|in office|in person|hybrid|remote)|"
+        r"(on site|onsite|in office|in person|hybrid|remote) (work|role|position|environment|schedule)|"
+        r"(prefer|preference).{0,30}(on site|onsite|hybrid|remote)"), _work_mode),
     (_r(r"full time .*after graduat|return offer|interested in full time"),
      _p("availability.interested_in_full_time_after_graduation")),
     (_r(r"currently (enrolled|a student|pursuing)|are you (currently )?(a )?student|enrolled in"), lambda f, c, s, n: True),
@@ -880,6 +899,13 @@ def resolve(spec: FormSpec, ctx: AnswerContext, *, rules_only: bool = False) -> 
             return res
         if f.id not in res.blank_optional:
             res.blank_optional.append(f.id)
+    for f in spec.fields:  # "Please confirm you are part of X program" answered No: not eligible, don't apply
+        a = res.answers.get(f.id)
+        if a is not None and f.required and CONFIRM_ELIGIBLE.search(norm(f.label)):
+            v = a.value[0] if isinstance(a.value, list) and a.value else a.value
+            if v is False or (isinstance(v, str) and re.match(r"^(no|not)\b", norm(v))):
+                res.skip_reason = f"not eligible: {f.label[:80]}"
+                return res
     for f in deferred:
         if not settle(f, _file_rule(f, ctx, spec, norm(f.label)), "file"):
             if f.required:

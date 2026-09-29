@@ -518,3 +518,31 @@ def test_housing_depends_on_location():
     near.meta["locations"] = ("Washington, DC",)
     assert resolve(far, ctx()).answers["h"].value == "Yes"
     assert resolve(near, ctx()).answers["h"].value == "No"
+
+
+def test_program_confirmation_no_means_skip():
+    llm = FakeLLM([DraftAnswer(id="c", answer="No, I am not a part of City Scholars", confidence=0.9)])
+    s = spec(F("c", "Please confirm you are a part of the City Scholars Program at UIUC.", "select",
+               options=("Yes, I am a part of City Scholars", "No, I am not a part of City Scholars")))
+    r = resolve(s, ctx(llm=llm))
+    assert not r.ok and r.skip_reason.startswith("not eligible")
+
+
+def test_in_person_assessment_not_work_mode():
+    llm = FakeLLM([DraftAnswer(id="a", answer="", unsure=True)])
+    s = spec(F("a", "Selected candidates must complete an in-person technical assessment. Please select your preferred "
+                    "date.", "select", options=("Wednesday, October 14", "Unavailable for in-person assessment")))
+    r = resolve(s, ctx(llm=llm))
+    assert "a" not in r.answers or r.answers["a"].source != "profile"
+
+
+def test_graduation_season_options():
+    r = resolve(spec(F("g", "When do you expect to graduate?", "radio",
+                       options=("December 2027/January 2028", "Spring 2028", "Summer 2028"))), ctx())
+    assert r.answers["g"].value == "Spring 2028"
+
+
+def test_hear_prefers_generic_over_specific_other():
+    opts = ("Grace Hopper Celebration", "Linkedin", "Google", "Referral", "Other conferences or events")
+    r = resolve(spec(F("h", "How did you hear about this job?", "select", options=opts)), ctx())
+    assert r.answers["h"].value == "Google"
