@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS events (
     detail TEXT
 );
 """
-FINAL_STATUSES = ("submitted", "skipped", "manual", "closed")
+FINAL_STATUSES = ("submitted", "skipped", "manual", "closed", "assist")  # assist: waiting for the user
 MAX_ATTEMPTS = 2
 
 
@@ -244,3 +244,10 @@ def reset_status(conn: sqlite3.Connection, status: str) -> int:
     n = conn.execute("DELETE FROM applications WHERE status = ?", (status,)).rowcount
     conn.commit()
     return n
+
+
+def assist_queue(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
+    """Applications filled by automation that need a human to pass a bot check and click Submit."""
+    return conn.execute(
+        "SELECT p.*, a.answers, a.reason FROM applications a JOIN postings p ON p.key = a.key"
+        " WHERE a.status = 'assist' ORDER BY a.updated_at LIMIT ?", (limit,)).fetchall()

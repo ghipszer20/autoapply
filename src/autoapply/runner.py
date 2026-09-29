@@ -177,7 +177,8 @@ def run_cycle(cfg: Config, conn: sqlite3.Connection, *, live: bool, limit: int |
                     outcome = apply_one(page, all_adapters[row["ats"]], key=row["key"], url=row["url"],
                                         company=company, title=row["title"], terms=tuple(json.loads(row["terms"])),
                                         deps=deps, live=live, today=today,
-                                        locations=tuple(json.loads(row["locations"])))
+                                        locations=tuple(json.loads(row["locations"])),
+                                        assist_only=row["ats"] in cfg.run.assist_only)
                 except Exception as e:  # noqa: BLE001 - one bad page must not end the pass
                     outcome = ApplyOutcome("failed", f"crash: {type(e).__name__}: {str(e)[:200]}")
                 finally:
@@ -190,6 +191,9 @@ def run_cycle(cfg: Config, conn: sqlite3.Connection, *, live: bool, limit: int |
                                       form_url=outcome.form_url, answers=outcome.answers)
                 rep.outcomes.append((row["key"], outcome))
                 rep.add(f"{status:9} {company} | {row['title']} | {outcome.reason[:140]}")
+                if status == "assist":  # prepared for the user; counts toward the pass, no spacing needed
+                    attempted += 1
+                    continue
                 if status in ("skipped", "deferred", "closed"):
                     if budget_hit:
                         rep.add("LLM daily budget used up; stopping")

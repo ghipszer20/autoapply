@@ -51,6 +51,9 @@ def _status(conn: sqlite3.Connection) -> None:
     print(f"last discover: {db.get_state(conn, 'last_discover', 'never')}")
     print(f"postings: {c['total']} total, {c['eligible']} eligible")
     print("today: " + (", ".join(f"{k} {v}" for k, v in sorted(d.items())) or "nothing yet"))
+    waiting = len(db.assist_queue(conn, 1000))
+    if waiting:
+        print(f"waiting for you: {waiting} (run `autoapply assist` at the PC; it fills, you click Submit)")
 
 
 def _digest(conn: sqlite3.Connection, day) -> None:
@@ -160,6 +163,8 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--code", help="emailed security code to enter if the form asks for one")
     a.add_argument("--wait-code", action="store_true",
                    help="if a security code is asked for, wait up to 15 min for it in data/security_code.txt")
+    asst = sub.add_parser("assist", help="finish bot-checked applications: it fills, you pass the check + Submit")
+    asst.add_argument("--limit", type=int, default=20)
     d = sub.add_parser("digest")
     d.add_argument("--date")
     rt = sub.add_parser("retry", help="forget outcomes with this status so they are tried again")
@@ -199,6 +204,11 @@ def main(argv: list[str] | None = None) -> int:
         from .schedule import schedule_cmd
 
         return schedule_cmd(args.action)
+    elif cmd == "assist":
+        from .assist import run_assist
+
+        counts = run_assist(load_config(args.config), conn, limit=args.limit)
+        print("done: " + (", ".join(f"{k} {v}" for k, v in counts.items()) or "nothing to do"))
     elif cmd == "run":
         return _cmd_run(args, conn)
     elif cmd == "apply":

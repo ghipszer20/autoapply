@@ -52,6 +52,7 @@ class RunConfig(BaseModel):
     spacing_seconds: tuple[int, int] = (120, 360)
     discover_every_hours: float = 3
     ats_enabled: list[str] = ["greenhouse", "ashby", "lever"]
+    assist_only: list[str] = ["ashby", "lever"]  # bot-checked: prepare, then hand off to the user
 
 
 class Config(BaseModel):

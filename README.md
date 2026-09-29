@@ -37,6 +37,13 @@ Design: `docs/superpowers/specs/2026-09-29-autoapply-design.md`
 `gaps` lists the questions that most often cause skips: add answers to `profile.yaml` or `answer_bank.yaml`,
 then `autoapply retry skipped`.
 
+## Bot-checked sites: `autoapply assist`
+Ashby (spam scoring) and Lever (hCaptcha) refuse automated submits, and some Greenhouse boards email a code.
+autoapply never evades or solves these checks. Instead, those applications are prepared automatically and queued
+("waiting for you" in `status`). At the PC, run `.venv/Scripts/autoapply assist`: it opens each one in Chrome,
+fills every field with the saved answers, and waits. You pass the check if one appears and click Submit; it sees
+the confirmation page and records it. Press Enter in the terminal to skip one for later.
+
 ## Workday (pilot, 600+ postings)
 Workday needs an account per company, so dry runs stop at the account page. To enable it:
 1. Watch one real run: `.venv/Scripts/autoapply apply <workday key> --live --headed` (keys: `workday:<tenant>:<req id>`,

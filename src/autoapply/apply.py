@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -47,6 +48,9 @@ def _safe(key: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", key)[:120]
 
 
+BOT_CHECK = re.compile(r"captcha|spam|security code|verification", re.I)
+
+
 def snap(page, path: Path) -> str:
     """Best-effort record: full page, else the visible viewport, else nothing. Never stops an application."""
     for full in (True, False):
@@ -69,7 +73,8 @@ def _audit(answers) -> dict[str, Any]:
 
 def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title: str, terms: tuple[str, ...],
               deps: ApplyDeps, live: bool, today: date | None = None,
-              locations: tuple[str, ...] = ()) -> ApplyOutcome:
+              locations: tuple[str, ...] = (), assist_only: bool = False) -> ApplyOutcome:
+    """assist_only: bot-checked site — fill and record the answers, never click Submit (see assist.py)."""
     today = today or date.today()
     if hasattr(adapter, "apply_flow"):  # multi-page systems (Workday)
         return _apply_flow(page, adapter, key=key, url=url, company=company, title=title, terms=terms, deps=deps,
@@ -124,6 +129,9 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
         return ApplyOutcome("failed", "fill: " + "; ".join(problems[:4]), **base)
     if not live:
         return ApplyOutcome("dry_run", f"resume: {choice.reason}", **base)
+    if assist_only:
+        return ApplyOutcome("assist", "bot-checked site: answers ready, needs you to click Submit (autoapply assist)",
+                            **base)
     try:
         result = adapter.submit(page)
     except Exception as e:  # noqa: BLE001 - the click may or may not have gone through
@@ -132,6 +140,8 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
     base["screenshot"] = snap(page, done) or base["screenshot"]
     if result.status == "failed":  # submit was clicked: never retry automatically (could apply twice)
         return ApplyOutcome("manual", f"unconfirmed submit, check screenshot: {result.detail}", **base)
+    if result.status == "manual" and BOT_CHECK.search(result.detail):  # the site refused it: nothing was received
+        return ApplyOutcome("assist", f"{result.detail}; needs you (autoapply assist)", **base)
     return ApplyOutcome(result.status, result.detail, **base)
 
 

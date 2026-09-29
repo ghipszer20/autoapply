@@ -12,6 +12,8 @@ Run commands from the repo root with `.venv/Scripts/autoapply`:
   (counts per status, then the submitted companies)
 - "manual" / "what needs me": run `.venv/Scripts/autoapply manual` and list the first 10 lines
 - "gaps" / "why are you skipping": run `.venv/Scripts/autoapply gaps` and list the top 5 reasons
+- "assist" / "what needs me": run `.venv/Scripts/autoapply status` and report the "waiting for you" count;
+  finishing them (`autoapply assist`) needs the user at the PC because they click Submit themselves
 
 Never edit code, config, or git state in response to a phone command. If a request is anything other
 than the commands above, say so and ask the user to do it from the PC.

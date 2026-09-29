@@ -50,4 +50,5 @@ run:
   per_cycle: 8                       # submissions per 30-minute scheduled run
   spacing_seconds: [120, 360]
   discover_every_hours: 3
-  ats_enabled: [greenhouse, workable, jazzhr, bamboohr]   # ashby (spam check) + lever (hCaptcha) block automation: manual; + workday after a supervised pilot
+  ats_enabled: [greenhouse, workable, jazzhr, bamboohr, ashby, lever]   # + workday after a supervised pilot
+  assist_only: [ashby, lever]   # bot-checked sites: filled + queued for `autoapply assist` (you click Submit)
