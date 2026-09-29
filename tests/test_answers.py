@@ -420,3 +420,15 @@ def test_date_available():
 def test_question_part_decides(label, want):
     r = resolve(spec(F("q", label, "radio", options=("YES", "NO"))), ctx())
     assert r.answers["q"].value == want
+
+
+@pytest.mark.parametrize("text", ["I am proficient in Java and Python.", "I have solid experience with Java.",
+                                  "My expertise in C++ is deep."])
+def test_overclaims_rejected(text):
+    llm = FakeLLM([DraftAnswer(id="q", answer=text, confidence=0.9)])
+    assert not resolve(spec(F("q", "Tell us about yourself", "textarea")), ctx(llm=llm)).ok
+
+
+def test_plain_claims_accepted():
+    llm = FakeLLM([DraftAnswer(id="q", answer="I built a C++ order book to learn market microstructure.", confidence=0.9)])
+    assert resolve(spec(F("q", "Tell us about yourself", "textarea")), ctx(llm=llm)).ok

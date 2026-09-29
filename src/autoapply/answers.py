@@ -24,6 +24,8 @@ from .profile import Profile
 from .resume.verify import verify_text
 
 MIN_CONFIDENCE = 0.6
+OVERCLAIM = re.compile(r"\b(proficien\w*|expert(ise)?|extensive(ly)?|mastery|years of (experience|professional)|"
+                       r"(strong|solid|deep|advanced) (experience|background|knowledge|skills?|proficiency))\b", re.I)
 CONDITIONAL = re.compile(r"^(if (you )?(selected|answered|chose|checked|picked|indicated)\b|if (yes|so|other|applicable)\b|"
                          r"if you (are|have|do|were|will)\b|please (specify|explain|describe) if\b)")
 DESCRIPTION_CHARS = 6000
@@ -610,7 +612,10 @@ SYSTEM = (
     "You fill in internship application questions for the candidate described in FACTS. Use only FACTS and the "
     "job posting. Never invent experience, skills, employers, numbers, dates, or personal details, and never "
     "upgrade a claim: do not add results, impact, users, money, rankings or outcomes that FACTS do not state "
-    "(e.g. paper trading is not real trading; a project is not a product with users). Write in the "
+    "(e.g. paper trading is not real trading; a project is not a product with users; an order book project is not "
+    "'scalable backend systems'). Never state a skill level (proficient, expert, extensive, strong, solid, advanced): "
+    "FACTS rate every language Intermediate, so just name what was used. Dates and availability may only come from "
+    "FACTS (availability, graduation); if a question asks for dates FACTS don't give, set unsure=true. Write in the "
     "first person, plainly and specifically, within any max_length. For select/radio questions answer with one "
     "option copied exactly; for multiselect put exact options in choices. Questions starting with 'If ...' depend "
     "on the previous question: if they do not apply given your other answers, return an empty answer with "
@@ -653,6 +658,8 @@ def _accept_draft(f: FormField, d: DraftAnswer | None, allowed_text: str = "") -
     if not text or (f.max_length and len(text) > f.max_length):
         return None
     if allowed_text and verify_text(allowed_text, text):  # invented number or technology
+        return None
+    if OVERCLAIM.search(text):  # skill-level or experience-length claims the profile doesn't support
         return None
     return text
 
