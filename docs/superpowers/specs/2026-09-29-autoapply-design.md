@@ -30,8 +30,8 @@ Phone (Claude app) ──Remote Control──► Claude Code session in repo ─
 ### Modules (`src/autoapply/`)
 - **`models.py`**: the `Posting` data class (company, title, url, ats, ats_job_id, locations, terms, category, source, posted_at) and the SQLite schema. Tables: postings, applications, answers, events, state (holds the kill switch).
 - **`sources/`**: each source has `fetch() -> list[Posting]`.
-  - `speedyapply.py`: parses the README's markdown/HTML tables, using the "Posting" link.
-  - `simplify.py`: reads `.github/scripts/listings.json` from Summer2027-Internships plus the off-season repo.
+  - `speedyapply.py`: parses the README markdown/HTML tables of both 2027-SWE-College-Jobs and 2027-AI-College-Jobs, using the "Posting" link.
+  - `simplify.py`: reads `.github/scripts/listings.json` from Summer2027-Internships. It already includes off-season terms.
   - `github_lists.py`: generic parser for other repos (vanshb03 etc.), configured in YAML.
   - `company_boards.py`: watchlist YAML of Greenhouse/Lever/Ashby board tokens and Workday tenants, called through their public job APIs. Quant firms go here (Jane Street, Citadel, HRT, Jump, Two Sigma, IMC, Optiver, SIG, DRW, …).
   - `email_alerts.py`: Gmail API with a read-only OAuth scope. It parses LinkedIn/Indeed/Handshake alert emails into (company, title, location) and hands them to the resolver.
@@ -46,6 +46,14 @@ Phone (Claude app) ──Remote Control──► Claude Code session in repo ─
   3. An LLM draft.
   4. Fixed answers for sensitive questions: work authorization, sponsorship, EEO/demographics (default "decline"), legal attestations, "applied before" and "referral". These are never guessed.
   If any required field ends up unanswered, or the draft is `unsure`, the application is **skipped**, not guessed.
+- **`resume/`**: resume tailoring (added 2026-09-29 at the user's request).
+  - `resume.yaml` (gitignored) is the structured master copy of `Hipszer_Resume2026.pdf`, turned into data once at setup and checked by the user. Every bullet, skill, course, date and number the resume may ever state lives here. It's the list of facts that tailoring can draw on.
+  - `render.py`: HTML template reproducing the current one-page layout, rendered to PDF with Playwright's `page.pdf()`. The PDF must stay one page, or the version is rejected.
+  - `fit.py`: `claude -p` (Haiku) scores 0–100 how well the master resume fits the posting. At or above `tailor_threshold` (default 70), the master PDF is used unchanged.
+  - `tailor.py`: below the threshold, `claude -p` returns a new `resume.yaml`. It may reorder sections and bullets, choose which coursework/skills/projects to show, and reword bullets to use the posting's terms. It may **not** add skills, technologies, employers, titles, dates, numbers or claims that aren't in the master copy.
+  - `verify.py` checks the result mechanically: every skill/technology token and every number in the output must appear in the master copy, and dates, employers and titles must be unchanged. Any failure means the master resume is used instead and the reason is logged.
+  - Accepted versions are saved to `C:\Users\24GHi\Downloads\autoapply_resumes\<Company>_<Title>_<YYYY-MM-DD>.pdf`. The applications table records which file was submitted.
+  - Usage: tailoring runs only below the threshold. It has its own daily cap in the `claude -p` budget.
 - **`ats/`**: one adapter per application system with the same interface: `matches(url)`, `load_form(page, posting) -> FormSpec`, `fill(page, FormSpec, answers)`, `submit(page) -> Result`.
   - Greenhouse (form schema from `boards-api.greenhouse.io/v1/boards/{tok}/jobs/{id}?questions=true`), Ashby, Lever.
   - Later: Workday, iCIMS, SmartRecruiters, and a generic Claude-driven adapter for custom sites.
@@ -75,7 +83,7 @@ Phone (Claude app) ──Remote Control──► Claude Code session in repo ─
    - Confirm that from the phone, Remote Control can run `autoapply off`.
 1. Scaffold: git init, .gitignore, venv, pyproject (httpx, playwright, pyyaml, pydantic, keyring, pytest), private GitHub repo. Also a setup wizard that asks for the profile facts: address, work authorization/sponsorship, EEO choices, availability, links, relocation.
 2. Sources (speedyapply, Simplify, company boards) + resolve/dedupe + filter + SQLite. `autoapply discover` prints counts by source, application system and term.
-3. `llm.py` + `answers.py` + reviewing the answer bank.
+3. `llm.py` + `answers.py` + reviewing the answer bank, plus `resume/` (convert the master to `resume.yaml`, which the user checks; render, fit, tailor, verify; save to `Downloads\autoapply_resumes`).
 4. Greenhouse, Ashby and Lever adapters. `--dry-run` on about 10 live postings each, with screenshots checked. Then a live pilot of 5 applications, then turn it on.
 5. Runner, caps, kill switch, Task Scheduler job, digest, CLAUDE.md for phone control.
 6. Gmail job-alert ingestion (LinkedIn/Indeed/Handshake) resolved to company sites.
