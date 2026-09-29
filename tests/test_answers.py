@@ -432,3 +432,20 @@ def test_overclaims_rejected(text):
 def test_plain_claims_accepted():
     llm = FakeLLM([DraftAnswer(id="q", answer="I built a C++ order book to learn market microstructure.", confidence=0.9)])
     assert resolve(spec(F("q", "Tell us about yourself", "textarea")), ctx(llm=llm)).ok
+
+
+def test_embargoed_country_citizenship_questions():
+    s = spec(F("a", "Is your most recent country of (1) citizenship or (2) permanent residency one of the following "
+                    "countries: North Korea; Syria; Iran; or Cuba?", "radio", options=YN),
+             F("b", "Please indicate which country is your most recent country of citizenship or permanent residency",
+               "radio", options=("Cuba", "Iran", "North Korea", "Syria")))
+    r = resolve(s, ctx())
+    assert r.ok, r.skip_reason
+    assert r.answers["a"].value == "No" and "b" in r.blank_optional
+
+
+def test_authorization_for_other_country_not_answered():
+    r = resolve(spec(F("a", "Are you legally authorized to work in Canada?", "select", options=YN)), ctx())
+    assert not r.ok
+    r2 = resolve(spec(F("a", "Are you authorized to work in the United States or Canada?", "select", options=YN)), ctx())
+    assert r2.answers["a"].value == "Yes"

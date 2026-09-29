@@ -204,7 +204,7 @@ def _sponsorship(f, c, s, n):
 
 def _authorized(f, c, s, n):
     ok = c.profile.get("work_authorization.authorized_to_work_in_us")
-    if ok is None:
+    if ok is None or (_OTHER_COUNTRY.search(n) and not _US.search(n)):  # e.g. "authorized to work in Canada?"
         return UNANSWERABLE
     if f.options and pick_bool(f.options, bool(ok)) is None and ok:
         needs = _needs_sponsorship(c)
@@ -212,16 +212,27 @@ def _authorized(f, c, s, n):
     return bool(ok)
 
 
+_OTHER_COUNTRY = re.compile(r"\b(north korea|syria|iran|cuba|russia|belarus|venezuela|sudan|crimea|china|canada|mexico|"
+                            r"india|united kingdom|uk|germany|france|brazil|countries|country list)\b")
+_US = re.compile(r"\b(united states|u s|us|usa|america)\b")
+
+
 def _citizen(f, c, s, n):
     cit = c.profile.get("work_authorization.us_citizen")
     if cit is None:
         return UNANSWERABLE
+    if not cit:
+        return UNANSWERABLE
+    names_others = bool(_OTHER_COUNTRY.search(n))
     if f.options and pick_bool(f.options, True) is None:  # status list or country list, not yes/no
-        if not cit:
-            return UNANSWERABLE
-        return Choice("U.S. Citizen", ("us citizen", "u s citizen", "united states citizen", "citizen",
-                                       "united states", "united states of america", "usa"))
-    return bool(cit)
+        us_opt = pick(f.options, ("us citizen", "u s citizen", "united states citizen", "united states",
+                                  "united states of america", "usa", "citizen"))
+        if us_opt is None and all(_OTHER_COUNTRY.search(norm(o)) or len(o) < 30 for o in f.options):
+            return BLANK  # a country list without the U.S.: follow-up that doesn't apply to a U.S. citizen
+        return Choice(us_opt, (us_opt,)) if us_opt else UNANSWERABLE
+    if names_others:  # "Is your country of citizenship one of: North Korea; Syria; ...?"
+        return bool(_US.search(n.replace("u s person", "")))
+    return True
 
 
 _EEO_CANDIDATES = {
