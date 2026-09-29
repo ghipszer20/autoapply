@@ -39,7 +39,7 @@ class LLMConfig(BaseModel):
 
 
 class ResumeConfig(BaseModel):
-    master_pdf: str = r"C:\Users\24GHi\Downloads\Hipszer_Resume2026.pdf"
+    master_pdf: str = r"C:\Users\24GHi\Downloads\Hipszer_resume_fall2026.pdf"
     master_yaml: str = "resume.yaml"
     out_dir: str = r"C:\Users\24GHi\Downloads\autoapply_resumes"
     tailor_threshold: int = 70
