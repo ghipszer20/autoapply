@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from .forms import FormField, FormSpec, norm, pick, pick_bool
 from .llm import LLMError
 from .profile import Profile
+from .resume.verify import verify_text
 
 MIN_CONFIDENCE = 0.6
 CONDITIONAL = re.compile(r"^(if (you )?(selected|answered|chose|checked|picked|indicated)\b|if (yes|so|other|applicable)\b|"
@@ -553,7 +554,9 @@ def _first_rule(rules: list[Rule], n: str) -> Callable | None:
 
 SYSTEM = (
     "You fill in internship application questions for the candidate described in FACTS. Use only FACTS and the "
-    "job posting. Never invent experience, skills, employers, numbers, dates, or personal details. Write in the "
+    "job posting. Never invent experience, skills, employers, numbers, dates, or personal details, and never "
+    "upgrade a claim: do not add results, impact, users, money, rankings or outcomes that FACTS do not state "
+    "(e.g. paper trading is not real trading; a project is not a product with users). Write in the "
     "first person, plainly and specifically, within any max_length. For select/radio questions answer with one "
     "option copied exactly; for multiselect put exact options in choices. Questions starting with 'If ...' depend "
     "on the previous question: if they do not apply given your other answers, return an empty answer with "
@@ -582,7 +585,7 @@ def _draft(spec: FormSpec, fields: list[FormField], c: AnswerContext) -> dict[st
     return {d.id: d for d in out.answers}
 
 
-def _accept_draft(f: FormField, d: DraftAnswer | None) -> Any:
+def _accept_draft(f: FormField, d: DraftAnswer | None, allowed_text: str = "") -> Any:
     if d is None or d.unsure or d.confidence < MIN_CONFIDENCE:
         return None
     if f.type in ("multiselect",) or (f.type == "checkbox" and f.options):
@@ -594,6 +597,8 @@ def _accept_draft(f: FormField, d: DraftAnswer | None) -> Any:
         return pick_bool([], True) == d.answer
     text = d.answer.strip()
     if not text or (f.max_length and len(text) > f.max_length):
+        return None
+    if allowed_text and verify_text(allowed_text, text):  # invented number or technology
         return None
     return text
 
@@ -678,6 +683,7 @@ def resolve(spec: FormSpec, ctx: AnswerContext, *, rules_only: bool = False) -> 
         return res
 
     llm_error = None
+    allowed = "\n".join([_facts(ctx), spec.company, spec.title, spec.description or "", *(f.label for f in spec.fields)])
     if unresolved and ctx.llm is not None:
         try:
             drafts = _draft(spec, unresolved, ctx)
@@ -689,7 +695,7 @@ def resolve(spec: FormSpec, ctx: AnswerContext, *, rules_only: bool = False) -> 
             if f.id in conditional and d is not None and not d.unsure and not (d.answer.strip() or d.choices):
                 res.blank_optional.append(f.id)  # follow-up that does not apply
                 continue
-            value = _accept_draft(f, d)
+            value = _accept_draft(f, d, allowed)
             if value is None:
                 still.append(f)
             else:

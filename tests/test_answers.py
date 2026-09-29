@@ -354,3 +354,15 @@ def test_citizenship_country_list():
 def test_hear_variants(label):
     r = resolve(spec(F("h", label, "select", options=("Friend", "Other"))), ctx())
     assert r.answers["h"].value == "Other"
+
+
+def test_llm_text_with_invented_number_or_tech_rejected():
+    llm = FakeLLM([DraftAnswer(id="q", answer="I have 5 years of Kubernetes experience.", confidence=0.9)])
+    assert not resolve(spec(F("q", "Tell us about yourself", "textarea")), ctx(llm=llm)).ok
+
+
+def test_llm_text_may_mention_posting_terms():
+    llm = FakeLLM([DraftAnswer(id="q", answer="I want to learn Kafka, which your team uses, building on my C++ work.",
+                               confidence=0.9)])
+    r = resolve(spec(F("q", "Why this role?", "textarea"), description="We use Kafka and Python."), ctx(llm=llm))
+    assert r.ok, r.skip_reason
