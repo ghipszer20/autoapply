@@ -67,6 +67,7 @@ class LLM:
     model: str = "haiku"
     daily_total: int = 400
     per_purpose: dict[str, int] = field(default_factory=dict)
+    purpose_models: dict[str, str] = field(default_factory=dict)  # e.g. {"answers": "sonnet"}
     timeout: int = 180
     today: Callable[[], date] = date.today
 
@@ -99,7 +100,7 @@ class LLM:
             raise LLMError(f"prompt too long ({len(prompt)} chars > {MAX_PROMPT_CHARS})")
         args = [
             self.claude_path, "-p", prompt,
-            "--model", model or self.model,
+            "--model", model or self.purpose_models.get(purpose) or self.model,
             "--output-format", "json",
             "--tools", "",
             "--no-session-persistence",

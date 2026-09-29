@@ -35,6 +35,7 @@ class LLMConfig(BaseModel):
     model: str = "haiku"
     daily_total: int = 400
     per_purpose: dict[str, int] = {"fit": 150, "tailor": 60, "answers": 200, "cover": 60}
+    purpose_models: dict[str, str] = {"answers": "sonnet", "cover": "sonnet", "tailor": "sonnet"}
 
 
 class ResumeConfig(BaseModel):

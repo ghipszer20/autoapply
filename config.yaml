@@ -36,6 +36,7 @@ llm:                       # all LLM work goes through `claude -p` on the subscr
   model: haiku
   daily_total: 400         # claude -p calls per day, all purposes
   per_purpose: {fit: 150, tailor: 60, answers: 200, cover: 60}
+  purpose_models: {answers: sonnet, cover: sonnet, tailor: sonnet}   # writing that goes out under your name
 
 resume:
   master_pdf: 'C:\Users\24GHi\Downloads\Hipszer_Resume2026.pdf'

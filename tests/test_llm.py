@@ -103,3 +103,12 @@ def test_model_override(conn):
     r = FakeRunner(envelope({"ok": True, "why": ""}))
     mk(conn, r).ask("q", Verdict, purpose="t", system="s", model="sonnet")
     assert r.calls[0][r.calls[0].index("--model") + 1] == "sonnet"
+
+
+def test_purpose_model(conn):
+    r = FakeRunner(envelope({"ok": True, "why": ""}), envelope({"ok": True, "why": ""}))
+    llm = mk(conn, r, purpose_models={"answers": "sonnet"})
+    llm.ask("q", Verdict, purpose="answers", system="s")
+    llm.ask("q", Verdict, purpose="fit", system="s")
+    assert r.calls[0][r.calls[0].index("--model") + 1] == "sonnet"
+    assert r.calls[1][r.calls[1].index("--model") + 1] == "haiku"

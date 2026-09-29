@@ -84,7 +84,8 @@ class CycleReport:
 
 def build_deps(cfg: Config, conn: sqlite3.Connection, key_holder: dict) -> ApplyDeps:
     master = load_resume(ROOT / cfg.resume.master_yaml)
-    llm = LLM(conn=conn, model=cfg.llm.model, daily_total=cfg.llm.daily_total, per_purpose=dict(cfg.llm.per_purpose))
+    llm = LLM(conn=conn, model=cfg.llm.model, daily_total=cfg.llm.daily_total, per_purpose=dict(cfg.llm.per_purpose),
+              purpose_models=dict(cfg.llm.purpose_models))
     return ApplyDeps(
         profile=Profile.load(ROOT / "profile.yaml"),
         master=master,
