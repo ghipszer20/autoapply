@@ -6,6 +6,7 @@ import argparse
 import sqlite3
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TextIO
 
 import httpx
@@ -39,28 +40,134 @@ def discover(conn: sqlite3.Connection, cfg: Config, client: httpx.Client, now: d
     return 0 if ok else 1
 
 
+ROOT = Path(__file__).resolve().parents[2]
+
+
 def _status(conn: sqlite3.Connection) -> None:
     c = db.counts(conn)
+    today = datetime.now().astimezone().date()
+    d = db.digest(conn, today)["counts"]
     print(f"enabled: {'yes' if db.is_enabled(conn) else 'no'}")
     print(f"last discover: {db.get_state(conn, 'last_discover', 'never')}")
     print(f"postings: {c['total']} total, {c['eligible']} eligible")
+    print("today: " + (", ".join(f"{k} {v}" for k, v in sorted(d.items())) or "nothing yet"))
+
+
+def _digest(conn: sqlite3.Connection, day) -> None:
+    d = db.digest(conn, day)
+    print(f"{day}: " + (", ".join(f"{k} {v}" for k, v in sorted(d["counts"].items())) or "no activity"))
+    for r in d["rows"]:
+        print(f"  {r['status']:9} {r['company']} | {r['title']} | {(r['reason'] or '')[:100]}")
+
+
+def _cmd_run(args, conn) -> int:
+    from .runner import Locked, RunLock, discover_now, log_report, run_cycle
+
+    cfg = load_config(args.config)
+    live = not args.dry_run
+    try:
+        with RunLock():
+            rep = run_cycle(cfg, conn, live=live, limit=args.limit, ats=args.ats, headed=args.headed,
+                            discover_fn=None if args.no_discover else (lambda: discover_now(cfg, conn)))
+    except Locked as e:
+        print(f"skipped: {e}")
+        return 0
+    path = log_report(rep, datetime.now().astimezone())
+    print("\n".join(rep.lines) or rep.status)
+    print(f"log: {path}")
+    return 0
+
+
+def _cmd_apply(args, conn) -> int:
+    """One posting by key, for testing adapters: dry run unless --live."""
+    import json
+
+    from playwright.sync_api import sync_playwright
+
+    from .apply import apply_one
+    from .resume import render
+    from .runner import _open_browser, adapters, build_deps
+
+    cfg = load_config(args.config)
+    row = conn.execute("SELECT * FROM postings WHERE key = ?", (args.key,)).fetchone()
+    if row is None:
+        print(f"unknown key {args.key}")
+        return 1
+    holder = {"key": args.key}
+    deps = build_deps(cfg, conn, holder)
+    with sync_playwright() as p:
+        render.use_playwright(p)
+        ctx, close = _open_browser(p, live=args.live, headed=args.headed or args.live)
+        try:
+            page = ctx.new_page()
+            o = apply_one(page, adapters()[row["ats"]], key=row["key"], url=row["url"], company=row["company"],
+                          title=row["title"], terms=tuple(json.loads(row["terms"])), deps=deps, live=args.live)
+        finally:
+            close()
+    db.record_application(conn, row["key"], o.status, o.reason, now=datetime.now().astimezone(),
+                          resume_path=o.resume_path, screenshot=o.screenshot, form_url=o.form_url, answers=o.answers)
+    print(f"{o.status}: {o.reason}")
+    for fid, a in o.answers.items():
+        print(f"  {a['source']:9} {fid[:30]:30} {str(a['value'])[:90]}")
+    print(f"screenshot: {o.screenshot}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="autoapply")
-    ap.add_argument("--db", default="autoapply.db")
-    ap.add_argument("--config", default="config.yaml")
-    ap.add_argument("command", choices=["discover", "on", "off", "status"])
+    ap.add_argument("--db", default=str(ROOT / "autoapply.db"))
+    ap.add_argument("--config", default=str(ROOT / "config.yaml"))
+    sub = ap.add_subparsers(dest="command", required=True)
+    for name in ("discover", "on", "off", "status", "manual", "gaps"):
+        sub.add_parser(name)
+    r = sub.add_parser("run", help="one bounded pass (live unless --dry-run; live requires 'on')")
+    r.add_argument("--dry-run", action="store_true")
+    r.add_argument("--limit", type=int)
+    r.add_argument("--ats", nargs="*")
+    r.add_argument("--headed", action="store_true")
+    r.add_argument("--no-discover", action="store_true")
+    a = sub.add_parser("apply", help="one posting by key (dry run unless --live)")
+    a.add_argument("key")
+    a.add_argument("--live", action="store_true")
+    a.add_argument("--headed", action="store_true")
+    d = sub.add_parser("digest")
+    d.add_argument("--date")
+    rt = sub.add_parser("retry", help="forget outcomes with this status so they are tried again")
+    rt.add_argument("status", choices=["skipped", "failed", "deferred", "manual"])
+    sc = sub.add_parser("schedule", help="Windows Task Scheduler entry")
+    sc.add_argument("action", choices=["install", "remove", "show"])
     args = ap.parse_args(argv)
     conn = db.connect(args.db)
-    if args.command == "on":
+    cmd = args.command
+    if cmd == "on":
         db.set_state(conn, "enabled", "1")
         print("autoapply enabled")
-    elif args.command == "off":
+    elif cmd == "off":
         db.set_state(conn, "enabled", "0")
         print("autoapply disabled")
-    elif args.command == "status":
+    elif cmd == "status":
         _status(conn)
+    elif cmd == "digest":
+        from datetime import date as _date
+
+        _digest(conn, _date.fromisoformat(args.date) if args.date else datetime.now().astimezone().date())
+    elif cmd == "manual":
+        for row in db.manual_list(conn):
+            print(f"{row['company']} | {row['title']} | {row['url']} | {(row['reason'] or '')[:80]}")
+    elif cmd == "gaps":
+        print("Most common reasons applications were skipped (add answers to profile.yaml / answer_bank.yaml):")
+        for reason, n in db.top_skip_reasons(conn):
+            print(f"  {n:4}  {reason}")
+    elif cmd == "retry":
+        print(f"reset {db.reset_status(conn, args.status)} {args.status} applications")
+    elif cmd == "schedule":
+        from .schedule import schedule_cmd
+
+        return schedule_cmd(args.action)
+    elif cmd == "run":
+        return _cmd_run(args, conn)
+    elif cmd == "apply":
+        return _cmd_apply(args, conn)
     else:
         try:
             cfg = load_config(args.config)

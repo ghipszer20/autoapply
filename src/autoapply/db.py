@@ -6,7 +6,7 @@ import json
 import sqlite3
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from .ats import classify
@@ -35,7 +35,27 @@ CREATE TABLE IF NOT EXISTS state (
     name  TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS applications (
+    key          TEXT PRIMARY KEY,   -- postings.key
+    status       TEXT NOT NULL,      -- submitted | dry_run | skipped | manual | failed
+    reason       TEXT,
+    resume_path  TEXT,
+    screenshot   TEXT,
+    form_url     TEXT,
+    answers      TEXT,               -- JSON audit of every submitted answer and its source
+    attempts     INTEGER NOT NULL DEFAULT 0,
+    updated_at   TEXT NOT NULL,
+    submitted_at TEXT
+);
+CREATE TABLE IF NOT EXISTS events (
+    ts     TEXT NOT NULL,
+    key    TEXT,
+    kind   TEXT NOT NULL,
+    detail TEXT
+);
 """
+FINAL_STATUSES = ("submitted", "skipped", "manual")
+MAX_ATTEMPTS = 2
 
 
 @dataclass
@@ -141,3 +161,77 @@ def counts(conn: sqlite3.Connection) -> dict:
         "SELECT reject_reason, COUNT(*) FROM postings WHERE eligible = 0"
         " GROUP BY reject_reason ORDER BY COUNT(*) DESC LIMIT 8")]
     return {"total": total, "eligible": eligible, "eligible_by_ats": by_ats, "top_rejects": rejects}
+
+
+def record_application(conn: sqlite3.Connection, key: str, status: str, reason: str, *, now: datetime,
+                       resume_path: str = "", screenshot: str = "", form_url: str = "",
+                       answers: dict | None = None) -> None:
+    ts = now.isoformat()
+    conn.execute(
+        "INSERT INTO applications (key, status, reason, resume_path, screenshot, form_url, answers, attempts,"
+        " updated_at, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+        " ON CONFLICT(key) DO UPDATE SET status = excluded.status, reason = excluded.reason,"
+        " resume_path = excluded.resume_path, screenshot = excluded.screenshot, form_url = excluded.form_url,"
+        " answers = excluded.answers, attempts = applications.attempts + 1, updated_at = excluded.updated_at,"
+        " submitted_at = COALESCE(applications.submitted_at, excluded.submitted_at)",
+        (key, status, reason, resume_path, screenshot, form_url, json.dumps(answers or {}, default=str), ts,
+         ts if status == "submitted" else None),
+    )
+    conn.execute("INSERT INTO events (ts, key, kind, detail) VALUES (?, ?, ?, ?)", (ts, key, status, reason))
+    conn.commit()
+
+
+def candidates(conn: sqlite3.Connection, ats: Iterable[str], limit: int) -> list[sqlite3.Row]:
+    """Eligible postings not yet finished, newest first. Failed ones get MAX_ATTEMPTS tries; dry runs don't count."""
+    ats = list(ats)
+    marks = ",".join("?" * len(ats))
+    final = ",".join("?" * len(FINAL_STATUSES))
+    return conn.execute(
+        f"SELECT p.* FROM postings p LEFT JOIN applications a ON a.key = p.key"
+        f" WHERE p.eligible = 1 AND p.ats IN ({marks})"
+        f" AND (a.key IS NULL OR (a.status NOT IN ({final}) AND NOT (a.status = 'failed' AND a.attempts >= ?)))"
+        f" ORDER BY COALESCE(p.posted_at, p.first_seen) DESC, p.key LIMIT ?",
+        (*ats, *FINAL_STATUSES, MAX_ATTEMPTS, limit),
+    ).fetchall()
+
+
+def applied_before(conn: sqlite3.Connection, company: str, *, exclude_key: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM applications a JOIN postings p ON p.key = a.key"
+        " WHERE a.status = 'submitted' AND lower(p.company) = lower(?) AND a.key != ? LIMIT 1",
+        (company, exclude_key),
+    ).fetchone()
+    return row is not None
+
+
+def submitted_on(conn: sqlite3.Connection, day: date) -> int:
+    return conn.execute("SELECT COUNT(*) FROM applications WHERE status = 'submitted' AND substr(submitted_at, 1, 10) = ?",
+                        (day.isoformat(),)).fetchone()[0]
+
+
+def digest(conn: sqlite3.Connection, day: date) -> dict:
+    rows = conn.execute(
+        "SELECT a.status, a.reason, p.company, p.title, p.url FROM applications a JOIN postings p ON p.key = a.key"
+        " WHERE substr(a.updated_at, 1, 10) = ? ORDER BY a.updated_at", (day.isoformat(),)).fetchall()
+    counts: dict[str, int] = {}
+    for r in rows:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+    return {"counts": counts, "rows": rows}
+
+
+def manual_list(conn: sqlite3.Connection, limit: int = 200) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT p.company, p.title, p.url, a.reason FROM applications a JOIN postings p ON p.key = a.key"
+        " WHERE a.status IN ('manual', 'failed') ORDER BY a.updated_at DESC LIMIT ?", (limit,)).fetchall()
+
+
+def top_skip_reasons(conn: sqlite3.Connection, limit: int = 25) -> list[tuple[str, int]]:
+    return [tuple(r) for r in conn.execute(
+        "SELECT reason, COUNT(*) FROM applications WHERE status = 'skipped' GROUP BY reason"
+        " ORDER BY COUNT(*) DESC LIMIT ?", (limit,))]
+
+
+def reset_status(conn: sqlite3.Connection, status: str) -> int:
+    n = conn.execute("DELETE FROM applications WHERE status = ?", (status,)).rowcount
+    conn.commit()
+    return n
