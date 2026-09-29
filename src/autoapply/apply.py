@@ -9,7 +9,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from .adapters.base import Adapter, AdapterError, PostingClosed
+from .adapters.base import Adapter, AdapterError, PostingClosed, SubmitResult
 from .answers import AnswerContext, BankEntry, resolve
 from .profile import Profile
 from .resume.cover import write_cover_letter
@@ -88,10 +88,15 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
         return ApplyOutcome("failed", "fill: " + "; ".join(problems[:4]), **base)
     if not live:
         return ApplyOutcome("dry_run", f"resume: {choice.reason}", **base)
-    result = adapter.submit(page)
+    try:
+        result = adapter.submit(page)
+    except Exception as e:  # noqa: BLE001 - the click may or may not have gone through
+        result = SubmitResult("failed", f"submit error: {type(e).__name__}: {str(e)[:150]}")
     done = deps.screenshot_dir / today.isoformat() / f"{key.replace(':', '_')}_after_submit.png"
     page.screenshot(path=str(done), full_page=True)
     base["screenshot"] = str(done)
+    if result.status == "failed":  # submit was clicked: never retry automatically (could apply twice)
+        return ApplyOutcome("manual", f"unconfirmed submit, check screenshot: {result.detail}", **base)
     return ApplyOutcome(result.status, result.detail, **base)
 
 

@@ -101,7 +101,8 @@ def _open_browser(p, *, live: bool, headed: bool):
     """Live runs use real Chrome with a persistent profile (cookies, fewer bot flags); dry runs are headless."""
     if live:
         ctx = p.chromium.launch_persistent_context(
-            str(ROOT / "browser_profile"), channel="chrome", headless=False, viewport={"width": 1280, "height": 900})
+            str(ROOT / "browser_profile"), channel="chrome", headless=False, viewport={"width": 1280, "height": 900},
+            args=["--start-minimized"])  # stays out of the way when a scheduled run starts
         return ctx, ctx.close
     browser = p.chromium.launch(headless=not headed)
     ctx = browser.new_context(viewport={"width": 1280, "height": 900})
