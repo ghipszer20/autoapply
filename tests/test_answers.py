@@ -461,3 +461,8 @@ def test_number_field_llm_answer_coerced():
     llm = FakeLLM([DraftAnswer(id="n", answer="40 hours per week", confidence=0.9)])
     r = resolve(spec(F("n", "How many hours per week can you work during the internship?", "number")), ctx(llm=llm))
     assert r.answers["n"].value == "40"
+
+
+def test_gpa_one_decimal_range():
+    r = resolve(spec(F("g", "GPA", "select", options=("Below 3.0", "3.0 - 3.4", "3.5 - 3.9", "4.0"))), ctx())
+    assert r.answers["g"].value == "3.5 - 3.9"

@@ -416,7 +416,13 @@ def _gpa(f, c, s, n):
             if len(nums) == 1 and (("+" in o or "above" in o or "or higher" in o or "greater" in o) and gpa >= nums[0]):
                 return Choice(opt, (opt,))
         trunc = f"{int(gpa * 10) / 10:.1f}"  # 3.912 -> 3.9 (never round up)
-        return Choice(trunc, (f"{gpa:.2f}", trunc))
+        if exact := pick(f.options, (f"{gpa:.2f}", trunc)):
+            return Choice(exact, (exact,))
+        for opt in f.options:  # ranges written to one decimal ("3.5 - 3.9") contain the truncated value
+            nums = [float(x) for x in re.findall(r"\d\.\d+", opt)]
+            if len(nums) >= 2 and nums[0] <= float(trunc) <= nums[1] and nums[0] < nums[1]:
+                return Choice(opt, (opt,))
+        return None
     return f"{gpa:.2f}"
 
 
