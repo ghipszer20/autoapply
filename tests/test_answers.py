@@ -382,3 +382,17 @@ def test_class_standing_by_term(label, want):
 def test_lgbtq_from_profile():
     r = resolve(spec(F("q", "Do you consider yourself member of the LGBTQIA+ community?", "select", options=YN)), ctx())
     assert r.answers["q"].value == "No"
+
+
+def test_current_or_former_employee_status_list():
+    opts = ("Current Alphabet Employee or Intern", "Former Alphabet Employee or Intern",
+            "Current or Former member of Alphabet extended workforce", "Never worked at Alphabet")
+    llm = FakeLLM()
+    r = resolve(spec(F("q", "Are you a current or former Alphabet employee, intern, vendor, contractor, or temp?", "select",
+                       options=opts)), ctx(llm=llm))
+    assert r.answers["q"].value == "Never worked at Alphabet" and llm.prompts == []
+
+
+def test_full_legal_name_has_middle():
+    r = resolve(spec(F("n", "Please provide your full legal name as it appears on your government ID"), F("m", "Name")), ctx())
+    assert r.answers["n"].value == "Gavin Matthew Hipszer" and r.answers["m"].value == "Gavin Hipszer"

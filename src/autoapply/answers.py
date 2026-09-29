@@ -249,6 +249,18 @@ def _eeo(key: str) -> Callable:
     return rule
 
 
+def _prior_employment(f, c, s, n):
+    worked = c.profile.get("legal_and_checks.previously_employed_by_any_company")
+    if worked is None:
+        return UNANSWERABLE
+    if f.options and pick_bool(f.options, bool(worked)) is None:
+        if worked:
+            return UNANSWERABLE  # which kind of prior relationship: not something to guess
+        opt = pick(f.options, ("never worked", "never", "no", "none", "not applicable"))
+        return Choice(opt, (opt,)) if opt else UNANSWERABLE
+    return bool(worked)
+
+
 def _lgbtq(f, c, s, n):
     orientation = c.profile.get("eeo.sexual_orientation")
     trans = c.profile.get("eeo.transgender")
@@ -331,8 +343,9 @@ SENSITIVE: list[Rule] = [
     (_r(r"applied (to|for|with|at)\b.*\b(before|previously|past)|previously applied|applied .*before|past application"),
      lambda f, c, s, n: c.applied_before(s.company)),
     (_r(r"(previously|ever|currently|formerly|former|current) (been )?(employed|worked|an employee)|"
-        r"worked (for|at) .*before|former employee|current employee|employee of"),
-     _p("legal_and_checks.previously_employed_by_any_company")),
+        r"worked (for|at) .*before|former employee|current employee|employee of|current or former\b|"
+        r"former \w+ (employee|intern|contractor)|ever worked (for|at)"),
+     _prior_employment),
     (_r(r"certify|attest|acknowledge|i agree|agree to|consent|privacy|terms (and )?conditions|terms of (use|service)|accurate|"
         r"true and complete|i understand|read and understand"), _acknowledge),
 ]
@@ -348,7 +361,10 @@ def _full_address(f, c, s, n):
 
 
 def _full_name(f, c, s, n):
-    return f"{c.profile.get('identity.first_name')} {c.profile.get('identity.last_name')}"
+    parts = [c.profile.get("identity.first_name"), c.profile.get("identity.last_name")]
+    if "legal" in n and c.profile.get("identity.middle_name"):  # legal name = as on government ID
+        parts.insert(1, c.profile.get("identity.middle_name"))
+    return " ".join(p for p in parts if p)
 
 
 def _school(f, c, s, n):
@@ -518,7 +534,7 @@ STANDARD: list[Rule] = [
     (_r(r"^(legal )?last name|surname|family name|^last$"), _p("identity.last_name")),
     (_r(r"middle name"), _p("identity.middle_name")),
     (_r(r"preferred (first )?name|nickname|name you go by"), _p("identity.preferred_name")),
-    (_r(r"^(full |legal |your )?name$|^full legal name"), _full_name),
+    (_r(r"^(full |legal |your )?name$|full legal name|^legal name"), _full_name),
     (_r(r"e ?mail"), _p("identity.email")),
     (_r(r"phone|mobile|cell"), _p("identity.phone")),
     (_r(r"current (company|employer|organi[sz]ation)|^(company|employer|organi[sz]ation)$"),
