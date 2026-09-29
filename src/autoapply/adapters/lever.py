@@ -9,7 +9,7 @@ import httpx
 
 from ..answers import Resolved
 from ..forms import FormField, FormSpec
-from .base import AdapterError, PostingClosed, SubmitResult, best_option, query_for, real_options
+from .base import AdapterError, PostingClosed, SubmitResult, best_option, query_for, real_options, settle
 
 _URL = re.compile(r"jobs\.lever\.co/([^/?#]+)/([0-9a-f-]{36})")
 
@@ -122,6 +122,7 @@ class LeverAdapter:
                 if kind == "file":
                     page.locator(f"input{sel}").set_input_files(str(Path(value)))
                     page.wait_for_timeout(3000)  # let Lever's resume parser finish its autofill
+                    settle(page, timeout=10_000)
                 elif kind == "select":
                     page.locator(f"select{sel}").select_option(label=str(value))
                 elif kind in ("radio", "checkboxes"):
@@ -139,10 +140,17 @@ class LeverAdapter:
     def _location(page, value: str) -> None:
         """Lever's location box only offers suggestions on real keystrokes; a suggestion must be clicked."""
         box = page.locator('input[name="location"]')
-        box.fill("")
-        box.press_sequentially(query_for(value), delay=90)
-        results = page.locator(".dropdown-results > div")
-        results.first.wait_for(timeout=10_000)
+        results = page.locator(".dropdown-results .dropdown-location")
+        query = query_for(value)
+        for _ in range(2):  # Lever's resume autofill can overwrite the box while we type
+            box.click()
+            box.fill("")
+            box.press_sequentially(query, delay=120)
+            page.wait_for_timeout(1500)
+            if box.input_value().strip() == query:
+                break
+        results.first.wait_for(timeout=15_000)
+        page.wait_for_timeout(800)
         opts = [t.strip() for t in results.all_inner_texts()]
         pick = best_option(opts, value) or best_option(opts, query_for(value))
         if pick is None:
