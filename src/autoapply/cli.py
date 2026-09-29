@@ -22,7 +22,7 @@ USER_AGENT = "autoapply/0.1 (personal job search; github.com/ghipszer20)"
 
 def discover(conn: sqlite3.Connection, cfg: Config, client: httpx.Client, now: datetime, out: TextIO) -> int:
     ok = 0
-    for name, fetch in build_sources(cfg):
+    for name, fetch in build_sources(cfg, conn):
         try:
             postings = fetch(client, now)
         except (httpx.HTTPError, SourceError, ValueError, KeyError) as e:
@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--db", default=str(ROOT / "autoapply.db"))
     ap.add_argument("--config", default=str(ROOT / "config.yaml"))
     sub = ap.add_subparsers(dest="command", required=True)
-    for name in ("discover", "on", "off", "status", "manual", "gaps"):
+    for name in ("discover", "on", "off", "status", "manual", "gaps", "gmail-auth"):
         sub.add_parser(name)
     r = sub.add_parser("run", help="one bounded pass (live unless --dry-run; live requires 'on')")
     r.add_argument("--dry-run", action="store_true")
@@ -158,6 +158,11 @@ def main(argv: list[str] | None = None) -> int:
         print("Most common reasons applications were skipped (add answers to profile.yaml / answer_bank.yaml):")
         for reason, n in db.top_skip_reasons(conn):
             print(f"  {n:4}  {reason}")
+    elif cmd == "gmail-auth":
+        from .sources.email_alerts import authorize
+
+        authorize()
+        print("gmail authorized (read-only); job-alert emails are now a discovery source")
     elif cmd == "retry":
         print(f"reset {db.reset_status(conn, args.status)} {args.status} applications")
     elif cmd == "schedule":

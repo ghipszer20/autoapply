@@ -220,9 +220,13 @@ def digest(conn: sqlite3.Connection, day: date) -> dict:
 
 
 def manual_list(conn: sqlite3.Connection, limit: int = 200) -> list[sqlite3.Row]:
+    """Needs a human: CAPTCHA/verification/failed applications, plus eligible postings only on third-party sites."""
     return conn.execute(
         "SELECT p.company, p.title, p.url, a.reason FROM applications a JOIN postings p ON p.key = a.key"
-        " WHERE a.status IN ('manual', 'failed') ORDER BY a.updated_at DESC LIMIT ?", (limit,)).fetchall()
+        " WHERE a.status IN ('manual', 'failed')"
+        " UNION ALL SELECT p.company, p.title, p.url, 'third-party site only' FROM postings p"
+        " LEFT JOIN applications a ON a.key = p.key WHERE p.ats = 'third_party' AND p.eligible = 1 AND a.key IS NULL"
+        " LIMIT ?", (limit,)).fetchall()
 
 
 def top_skip_reasons(conn: sqlite3.Connection, limit: int = 25) -> list[tuple[str, int]]:
