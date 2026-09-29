@@ -17,3 +17,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.egg-info/
+
+# personal resume master + generated files
+resume.yaml

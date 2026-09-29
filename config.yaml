@@ -31,3 +31,22 @@ boards:                    # verified 2026-09-29; token: display name
   lever:
     belvederetrading: Belvedere Trading
   ashby: {}
+
+llm:                       # all LLM work goes through `claude -p` on the subscription
+  model: haiku
+  daily_total: 400         # claude -p calls per day, all purposes
+  per_purpose: {fit: 150, tailor: 60, answers: 200, cover: 60}
+
+resume:
+  master_pdf: 'C:\Users\24GHi\Downloads\Hipszer_Resume2026.pdf'
+  master_yaml: resume.yaml           # gitignored; set verified: true to allow tailoring
+  out_dir: 'C:\Users\24GHi\Downloads\autoapply_resumes'
+  tailor_threshold: 70               # fit score at/above this uses the master PDF unchanged
+
+run:
+  daily_cap: 100
+  per_company_per_cycle: 3
+  per_cycle: 8                       # submissions per 30-minute scheduled run
+  spacing_seconds: [120, 360]
+  discover_every_hours: 3
+  ats_enabled: [greenhouse, ashby, lever]

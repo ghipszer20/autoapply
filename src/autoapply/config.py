@@ -31,9 +31,34 @@ class FilterConfig(BaseModel):
         return patterns
 
 
+class LLMConfig(BaseModel):
+    model: str = "haiku"
+    daily_total: int = 400
+    per_purpose: dict[str, int] = {"fit": 150, "tailor": 60, "answers": 200, "cover": 60}
+
+
+class ResumeConfig(BaseModel):
+    master_pdf: str = r"C:\Users\24GHi\Downloads\Hipszer_Resume2026.pdf"
+    master_yaml: str = "resume.yaml"
+    out_dir: str = r"C:\Users\24GHi\Downloads\autoapply_resumes"
+    tailor_threshold: int = 70
+
+
+class RunConfig(BaseModel):
+    daily_cap: int = 100
+    per_company_per_cycle: int = 3
+    per_cycle: int = 8
+    spacing_seconds: tuple[int, int] = (120, 360)
+    discover_every_hours: float = 3
+    ats_enabled: list[str] = ["greenhouse", "ashby", "lever"]
+
+
 class Config(BaseModel):
     filter: FilterConfig
     boards: dict[str, dict[str, str]] = {}
+    llm: LLMConfig = LLMConfig()
+    resume: ResumeConfig = ResumeConfig()
+    run: RunConfig = RunConfig()
 
 
 def load_config(path: str | Path) -> Config:
