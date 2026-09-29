@@ -76,6 +76,18 @@ EXTRACT_JS = r"""
 """
 
 
+def _tick(box) -> None:
+    """Check a radio/checkbox, including visually-hidden inputs behind custom widgets (click their label)."""
+    try:
+        box.check(timeout=4000)
+    except Exception:  # noqa: BLE001 - custom widget swallowed the click
+        box.locator("xpath=ancestor::label[1]").first.click(timeout=4000)
+    if not box.is_checked():
+        box.evaluate("e => { e.click(); }")
+    if not box.is_checked():
+        raise AdapterError("option did not stay selected")
+
+
 def dismiss_cookie_banner(page) -> None:
     """Cookie banners cover Apply buttons; decline where possible, else accept (only necessary cookies matter)."""
     for name in (r"^(decline|reject)( all)?$", r"^(accept|allow)( all)?( cookies)?$", r"^(ok|got it|i agree)$"):
@@ -163,10 +175,10 @@ class GenericAdapter:
                     idx = option_idx[fid]
                     if kind == "checkbox" and not isinstance(value, list):
                         if value is True:
-                            page.locator(f'[data-aa-idx="{next(iter(idx.values()))}"]').check()
+                            _tick(page.locator(f'[data-aa-idx="{next(iter(idx.values()))}"]'))
                         continue
                     for opt in value if isinstance(value, list) else [value]:
-                        page.locator(f'[data-aa-idx="{idx[opt]}"]').check()
+                        _tick(page.locator(f'[data-aa-idx="{idx[opt]}"]'))
             except Exception as e:  # noqa: BLE001
                 problems.append(f"{f.label[:60]}: {type(e).__name__}: {str(e)[:100]}")
         return problems

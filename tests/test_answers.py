@@ -408,3 +408,15 @@ def test_honeypot_stays_blank_even_if_required():
 def test_date_available():
     r = resolve(spec(F("d", "Date Available")), ctx())
     assert r.answers["d"].value == "05/24/2027"
+
+
+@pytest.mark.parametrize(("label", "want"), [
+    ("This position is not currently available for H-1B visa sponsorship. Are you authorized to work in the U.S. "
+     "without sponsorship?", "YES"),
+    ("Do you now or will you in the future require sponsorship for employment visa status? Please select \"Yes\" if "
+     "you will require the Company to commence an immigration case.", "NO"),
+    ("This position is in Lincoln, Nebraska. If necessary, are you willing to relocate?", "YES"),
+])
+def test_question_part_decides(label, want):
+    r = resolve(spec(F("q", label, "radio", options=("YES", "NO"))), ctx())
+    assert r.answers["q"].value == want

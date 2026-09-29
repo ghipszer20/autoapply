@@ -319,6 +319,7 @@ SENSITIVE: list[Rule] = [
     # bot traps: must stay empty even when marked required
     (_r(r"leave (this )?(field )?(blank|empty)|robots? only|for robots|do not (fill|enter|complete)|if you are (a )?human"),
      lambda f, c, s, n: BLANK),
+    (_r(r"(authori[sz]ed|eligible|able|permitted) to work\b.*\bwithout\b.*\b(sponsor|visa)"), _authorized),
     (_r(r"sponsor|visa|h 1b|h1b|immigration"), _sponsorship),
     (_r(r"export|itar|\bear\b|u s person|us person"), _export),
     (_r(r"clearance"), _clearance),
@@ -656,6 +657,13 @@ def _accept_draft(f: FormField, d: DraftAnswer | None, allowed_text: str = "") -
     return text
 
 
+def question_part(label: str) -> str:
+    """The sentence(s) that actually ask something: 'Preamble. More context. Are you X?' -> 'Are you X?'."""
+    sentences = re.split(r"(?<=[a-z0-9)\"'][.?!])\s+(?=[A-Z\"'(])", label.strip())  # not after 'U.S.'
+    asks = [s for s in sentences if s.rstrip().endswith("?")]
+    return " ".join(asks) if asks else label
+
+
 def _triggers_followup(value: Any) -> bool:
     """Does the parent answer open an 'If yes/other, please specify' follow-up?"""
     vals = value if isinstance(value, list) else [value]
@@ -695,10 +703,15 @@ def resolve(spec: FormSpec, ctx: AnswerContext, *, rules_only: bool = False) -> 
                 deferred.append(f)  # generated only once the application is known to go ahead
                 return "deferred"
             return "done" if settle(f, _file_rule(f, ctx, spec, n), "file") else "failed"
-        if rule := _first_rule(SENSITIVE, n):
-            return "done" if settle(f, rule(f, ctx, spec, n), "sensitive") else "failed"
-        if (rule := _first_rule(STANDARD, n)) and settle(f, rule(f, ctx, spec, n), "profile"):
-            return "done"
+        # match the actual question first: a preamble ("not eligible for H-1B sponsorship.") must not decide
+        # what "Are you authorized to work ... without sponsorship?" asks
+        q = norm(question_part(f.label))
+        for text in dict.fromkeys((q, n)):
+            if rule := _first_rule(SENSITIVE, text):
+                return "done" if settle(f, rule(f, ctx, spec, text), "sensitive") else "failed"
+        for text in dict.fromkeys((q, n)):
+            if (rule := _first_rule(STANDARD, text)) and settle(f, rule(f, ctx, spec, text), "profile"):
+                return "done"
         entry = next((b for b in ctx.bank if re.search(b.pattern, f.label, re.I)), None)
         if entry and settle(f, entry.answer, "bank"):
             return "done"

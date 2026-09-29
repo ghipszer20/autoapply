@@ -49,4 +49,4 @@ run:
   per_cycle: 8                       # submissions per 30-minute scheduled run
   spacing_seconds: [120, 360]
   discover_every_hours: 3
-  ats_enabled: [greenhouse, ashby, lever]
+  ats_enabled: [greenhouse, ashby, lever, workable, jazzhr, bamboohr]   # + workday after one supervised pilot
