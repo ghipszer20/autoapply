@@ -1,0 +1,16 @@
+[
+  {"active": true, "is_visible": true, "category": "Software", "company_name": "Cresta",
+   "date_posted": 1790000000, "degrees": ["Bachelor's"], "id": "a1", "locations": ["San Francisco, CA"],
+   "sponsorship": "Other", "terms": ["Summer 2027"], "title": "Software Engineer Intern",
+   "url": "https://job-boards.greenhouse.io/cresta/jobs/5106468008?utm_source=Simplify&ref=Simplify"},
+  {"active": false, "is_visible": true, "category": "Software", "company_name": "Gone Inc",
+   "date_posted": 1780000000, "degrees": [], "id": "a2", "locations": ["Austin, TX"],
+   "sponsorship": "Other", "terms": ["Summer 2027"], "title": "SWE Intern", "url": "https://gone.example/jobs/1"},
+  {"active": true, "is_visible": false, "category": "Quant", "company_name": "Hidden LLC",
+   "date_posted": 1790000000, "degrees": [], "id": "a3", "locations": [],
+   "sponsorship": "Other", "terms": ["Summer 2027"], "title": "Quant Dev Intern", "url": "https://hidden.example/1"},
+  {"active": true, "is_visible": true, "category": "Quant", "company_name": "Procter &amp; Gamble",
+   "date_posted": 1790000000, "degrees": ["Bachelor's", "Master's"], "id": "a4", "locations": ["Remote in USA"],
+   "sponsorship": "U.S. Citizenship is Required", "terms": ["Spring 2027", "Summer 2027"],
+   "title": "Data Science Co-op", "url": "https://pg.wd5.myworkdayjobs.com/en-US/pg/job/Remote/DS-Coop_R999"}
+]
