@@ -262,3 +262,24 @@ def workday_verification_link(tenant: str, *, wait_seconds: int = 90, sleep=None
                     return m.group(0).replace("&amp;", "&")
             sleep(10)
     return None
+
+
+_GH_CODE = re.compile(r"(?:security|verification) code[^A-Za-z0-9]{0,80}?\b([A-Za-z0-9]{8})\b", re.I | re.S)
+
+
+def greenhouse_security_code(*, wait_seconds: int = 90, sleep=None) -> str | None:
+    """Poll Gmail for Greenhouse's 8-character application security code (None if Gmail isn't set up)."""
+    import time
+
+    sleep = sleep or time.sleep
+    creds = credentials()
+    if creds is None:
+        return None
+    with httpx.Client(timeout=30) as client:
+        for _ in range(max(1, wait_seconds // 10)):
+            for msg in recent_messages(client, creds.token, "newer_than:15m from:greenhouse", 5):
+                body = re.sub(r"<[^>]+>", " ", _html_of(msg.get("payload", {})) or msg.get("snippet", ""))
+                if m := _GH_CODE.search(body):
+                    return m.group(1)
+            sleep(10)
+    return None

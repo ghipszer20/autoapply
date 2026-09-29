@@ -64,3 +64,9 @@ def test_workday_verify_link_pattern():
     from autoapply.sources.email_alerts import _VERIFY_LINK
     html = '<a href="https://fox.wd1.myworkdayjobs.com/domestic/activate/abc123?redirect=x">Verify Account</a>'
     assert _VERIFY_LINK.search(html).group(0) == "https://fox.wd1.myworkdayjobs.com/domestic/activate/abc123?redirect=x"
+
+
+def test_greenhouse_code_pattern():
+    from autoapply.sources.email_alerts import _GH_CODE
+    body = "Copy and paste this security code into the application: aB3dE9fG. It expires in 10 minutes."
+    assert _GH_CODE.search(body).group(1) == "aB3dE9fG"

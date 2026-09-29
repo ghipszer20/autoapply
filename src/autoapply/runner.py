@@ -31,7 +31,9 @@ LOCK_STALE = timedelta(hours=2)
 
 
 def adapters() -> dict:
-    out = {"greenhouse": GreenhouseAdapter(), "ashby": AshbyAdapter()}
+    from .sources.email_alerts import greenhouse_security_code
+
+    out = {"greenhouse": GreenhouseAdapter(email_code=greenhouse_security_code), "ashby": AshbyAdapter()}
     from .adapters.lever import LeverAdapter
     from .adapters.workday import WorkdayAdapter
 

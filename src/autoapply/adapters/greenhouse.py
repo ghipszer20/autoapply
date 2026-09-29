@@ -133,6 +133,9 @@ def _combobox_options(page, fid: str) -> list[str]:
 class GreenhouseAdapter:
     ats = "greenhouse"
 
+    def __init__(self, email_code=None):
+        self.email_code = email_code  # () -> code from Gmail, when authorized
+
     def form_url(self, url: str, key: str) -> str:
         return form_url(url, key)
 
@@ -201,17 +204,38 @@ class GreenhouseAdapter:
             raise AdapterError(f"no option for {value!r} among {opts[:6]}")
         page.locator(sel).nth(opts.index(pick)).click()
 
+    def _enter_code(self, page) -> bool:
+        """Greenhouse's anti-spam step: an 8-character code emailed to the applicant."""
+        code = self.email_code() if self.email_code else None
+        if not code:
+            return False
+        boxes = page.locator('input[id^="security-input"]')
+        if boxes.count() == len(code):
+            for i, ch in enumerate(code):
+                boxes.nth(i).fill(ch)
+        elif boxes.count() >= 1:
+            boxes.first.fill(code)
+        else:
+            return False
+        page.locator("button[type=submit]").last.click()
+        return True
+
     def submit(self, page) -> SubmitResult:
         start = page.url
         page.locator("button[type=submit]").last.click()
-        for _ in range(40):
+        code_tried = False
+        for _ in range(60):
             page.wait_for_timeout(500)
             body = page.inner_text("body").lower()
             if "confirmation" in page.url or "thank you for applying" in body or "application has been submitted" in body \
                     or "application was submitted" in body:
                 return SubmitResult("submitted", page.url)
             if re.search(r"security code|verification code|enter the code", body):
-                return SubmitResult("manual", "email security code required")
+                if not code_tried:
+                    code_tried = True
+                    if self._enter_code(page):
+                        continue
+                return SubmitResult("manual", "email security code required (set up Gmail to automate)")
             if page.query_selector('iframe[src*="recaptcha"][src*="bframe"]:visible, iframe[title*="challenge"]'):
                 return SubmitResult("manual", "captcha challenge")
         errors = page.eval_on_selector_all('[id$="-error"], .helper-text--error, .error-message',
