@@ -67,6 +67,8 @@ def test_workday_verify_link_pattern():
 
 
 def test_greenhouse_code_pattern():
-    from autoapply.sources.email_alerts import _GH_CODE
+    from autoapply.sources.email_alerts import find_security_code
     body = "Copy and paste this security code into the application: aB3dE9fG. It expires in 10 minutes."
-    assert _GH_CODE.search(body).group(1) == "aB3dE9fG"
+    assert find_security_code(body) == "aB3dE9fG"
+    assert find_security_code("Your security code for the complete application is below: X7K2M9QP") == "X7K2M9QP"
+    assert find_security_code("no code here") is None

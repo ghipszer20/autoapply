@@ -264,7 +264,16 @@ def workday_verification_link(tenant: str, *, wait_seconds: int = 90, sleep=None
     return None
 
 
-_GH_CODE = re.compile(r"(?:security|verification) code[^A-Za-z0-9]{0,80}?\b([A-Za-z0-9]{8})\b", re.I | re.S)
+_CODE_CONTEXT = re.compile(r"(?:security|verification) code(.{0,240})", re.I | re.S)
+
+
+def find_security_code(text: str) -> str | None:
+    """First 8-character token after 'security code' that looks like a code (has a digit or mixed case)."""
+    for ctx in _CODE_CONTEXT.findall(text):
+        for tok in re.findall(r"\b[A-Za-z0-9]{8}\b", ctx):
+            if re.search(r"\d", tok) or (re.search(r"[a-z]", tok) and re.search(r"[A-Z]", tok)):
+                return tok
+    return None
 
 
 def greenhouse_security_code(*, wait_seconds: int = 90, sleep=None) -> str | None:
@@ -279,7 +288,7 @@ def greenhouse_security_code(*, wait_seconds: int = 90, sleep=None) -> str | Non
         for _ in range(max(1, wait_seconds // 10)):
             for msg in recent_messages(client, creds.token, "newer_than:15m from:greenhouse", 5):
                 body = re.sub(r"<[^>]+>", " ", _html_of(msg.get("payload", {})) or msg.get("snippet", ""))
-                if m := _GH_CODE.search(body):
-                    return m.group(1)
+                if code := find_security_code(body):
+                    return code
             sleep(10)
     return None
