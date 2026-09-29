@@ -43,7 +43,9 @@ def run(tmp_path, fail=frozenset()):
     return code, out.getvalue(), conn
 
 
-def test_build_sources_names():
+def test_build_sources_names(monkeypatch, tmp_path):
+    from autoapply.sources import email_alerts
+    monkeypatch.setattr(email_alerts, "TOKEN", tmp_path / "no_token.json")  # independent of this PC's Gmail setup
     names = [n for n, _ in build_sources(CFG)]
     assert names == ["speedyapply-swe", "speedyapply-ai", "simplify", "board:greenhouse:imc"]
 
@@ -85,3 +87,11 @@ def test_on_off_status(tmp_path, capsys):
     cli.main(["--db", dbp, "off"])
     cli.main(["--db", dbp, "status"])
     assert "enabled: no" in capsys.readouterr().out
+
+
+def test_email_alerts_registered_when_authorized(monkeypatch, tmp_path):
+    from autoapply.sources import email_alerts
+    tok = tmp_path / "token.json"
+    tok.write_text("{}")
+    monkeypatch.setattr(email_alerts, "TOKEN", tok)
+    assert "email-alerts" in [n for n, _ in build_sources(CFG)]

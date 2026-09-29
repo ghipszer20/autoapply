@@ -190,7 +190,10 @@ def credentials():
 
     creds = Credentials.from_authorized_user_file(str(TOKEN), SCOPES)
     if not creds.valid and creds.refresh_token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except Exception:  # noqa: BLE001 - expired/revoked (Testing-mode tokens last 7 days): re-run gmail-auth
+            return None
         TOKEN.write_text(creds.to_json(), encoding="utf-8")
     return creds if creds.valid else None
 
