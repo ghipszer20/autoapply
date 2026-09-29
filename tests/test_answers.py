@@ -226,3 +226,54 @@ def test_load_bank(tmp_path):
     [e] = load_bank(p)
     assert e.answer == "blue"
     assert load_bank(tmp_path / "missing.yaml") == []
+
+
+def test_followup_blank_when_parent_not_other():
+    s = spec(F("h", "How did you hear about us?", "select", options=("LinkedIn", "Other")),
+             F("hs", "If you selected other, please specify"),
+             F("rel", "Do you have any relatives employed by the company?", "select", options=YN),
+             F("reln", "If yes, please provide their name"))
+    r = resolve(s, ctx())
+    assert r.ok, r.skip_reason
+    assert r.answers["h"].value == "Other"
+    assert r.answers["hs"].value == "Personal project"  # parent was Other -> profile text
+    assert r.answers["rel"].value == "No" and "reln" in r.blank_optional
+
+
+def test_followup_after_llm_parent_empty_means_blank():
+    llm = FakeLLM([DraftAnswer(id="p", answer="No", confidence=0.9),
+                   DraftAnswer(id="c", answer="", confidence=1.0, unsure=False)])
+    s = spec(F("p", "Have you participated in our fellowship?", "select", options=YN),
+             F("c", "If so, which year?"))
+    r = resolve(s, ctx(llm=llm))
+    assert r.ok and "c" in r.blank_optional
+
+
+def test_highest_education_and_home_address():
+    r = resolve(spec(F("e", "Highest Level of Education", "radio",
+                       options=("High School Diploma or GED", "Bachelor's Degree")),
+                     F("a", "Home Address", "textarea")), ctx())
+    assert r.answers["e"].value == "High School Diploma or GED"
+    assert r.answers["a"].value == "1 Main St, Catonsville, MD 21228"
+
+
+def test_hear_falls_back_to_job_board():
+    r = resolve(spec(F("h", "How did you learn about us", "radio", options=("Agency", "Alumni", "Job Board"))), ctx())
+    assert r.answers["h"].value == "Job Board"
+
+
+def test_work_authorization_statements():
+    opts = ("Now or at any point the future, I will require visa sponsorship to work in the US.",
+            "Now or at any point in the future, I am eligible to work in the United States with no restrictions.")
+    r = resolve(spec(F("q", "Please select one of the following statements based on your work authorization:",
+                       "select", options=opts)), ctx())
+    assert r.answers["q"].value == opts[1]
+    opts2 = ("I will require sponsorship", "I do not require sponsorship")
+    r2 = resolve(spec(F("q", "Visa sponsorship status", "select", options=opts2)), ctx())
+    assert r2.answers["q"].value == opts2[1]
+
+
+def test_terms_ampersand_single_option():
+    r = resolve(spec(F("t", "Terms & Conditions", "select",
+                       options=("Yes, I have read and agree to DV Trading's privacy policy",))), ctx())
+    assert r.ok and r.answers["t"].value.startswith("Yes")

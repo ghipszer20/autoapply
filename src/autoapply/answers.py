@@ -23,6 +23,8 @@ from .llm import LLMError
 from .profile import Profile
 
 MIN_CONFIDENCE = 0.6
+CONDITIONAL = re.compile(r"^(if (you )?(selected|answered|chose|checked|picked|indicated)\b|if (yes|so|other|applicable)\b|"
+                         r"if you (are|have|do|were|will)\b|please (specify|explain|describe) if\b)")
 DESCRIPTION_CHARS = 6000
 
 
@@ -157,12 +159,48 @@ def _clearance(f, c, s, n):
     return held
 
 
-def _sponsorship(f, c, s, n):
+_NO_SPONSOR = re.compile(r"no restrictions|without (the need for |requiring )?(visa |employer |company )?sponsorship|"
+                         r"(do|will) not (now |currently )?(or in the future )?(need|require)|not require|"
+                         r"no sponsorship|citizen|permanent resident|green card")
+_SPONSOR = re.compile(r"(will|do|would) (now |currently |in the future )?(need|require)|need (visa )?sponsorship|"
+                      r"require (visa |employer )?sponsorship")
+
+
+def _statement(f: FormField, needs_sponsorship: bool) -> Any:
+    """Options that are whole statements ('I am eligible ... with no restrictions') rather than yes/no."""
+    for opt in f.options:
+        n = norm(opt)
+        says_no = bool(_NO_SPONSOR.search(n))
+        says_yes = not says_no and bool(_SPONSOR.search(n))
+        if (not needs_sponsorship and says_no) or (needs_sponsorship and says_yes):
+            return Choice(opt, (opt,))
+    return None
+
+
+def _needs_sponsorship(c: AnswerContext) -> bool | None:
     now = c.profile.get("work_authorization.requires_sponsorship_now")
     fut = c.profile.get("work_authorization.requires_sponsorship_future")
-    if now is None or fut is None:
+    return None if now is None or fut is None else bool(now or fut)
+
+
+def _sponsorship(f, c, s, n):
+    now = c.profile.get("work_authorization.requires_sponsorship_now")
+    needs = _needs_sponsorship(c)
+    if needs is None:
         return UNANSWERABLE
-    return bool(now or fut) if "future" in n or "now" not in n else bool(now)
+    if f.options and pick_bool(f.options, needs) is None:
+        return _statement(f, needs) or UNANSWERABLE
+    return needs if "future" in n or "now" not in n else bool(now)
+
+
+def _authorized(f, c, s, n):
+    ok = c.profile.get("work_authorization.authorized_to_work_in_us")
+    if ok is None:
+        return UNANSWERABLE
+    if f.options and pick_bool(f.options, bool(ok)) is None and ok:
+        needs = _needs_sponsorship(c)
+        return (_statement(f, needs) if needs is not None else None) or UNANSWERABLE
+    return bool(ok)
 
 
 def _citizen(f, c, s, n):
@@ -219,7 +257,7 @@ SENSITIVE: list[Rule] = [
     (_r(r"export|itar|\bear\b|u s person|us person"), _p("work_authorization.us_person_export_control")),
     (_r(r"clearance"), _clearance),
     (_r(r"authori[sz]ed to work|work authori[sz]ation|eligib\w* to work|legally (able|permitted|entitled)|right to work"),
-     _p("work_authorization.authorized_to_work_in_us")),
+     _authorized),
     (_r(r"citizen"), _citizen),
     (_r(r"sexual orientation"), _eeo("sexual_orientation")),
     (_r(r"transgender"), _eeo("transgender")),
@@ -236,20 +274,25 @@ SENSITIVE: list[Rule] = [
     (_r(r"drug (test|screen)"), _p("legal_and_checks.drug_test_consent")),
     (_r(r"non compete|non solicit|restrictive covenant"), _p("legal_and_checks.non_compete_or_non_solicit")),
     (_r(r"convict|felony|misdemeanor|criminal"), _p("legal_and_checks.criminal_convictions")),
-    (_r(r"referr(al|ed|er)?|who referred"), lambda f, c, s, n: False if f.type != "text" or f.required else BLANK),
+    (_r(r"\breferr(al|ed|er)?\b|\bwho referred"), lambda f, c, s, n: False if f.type != "text" or f.required else BLANK),
     (_r(r"relative|family member|related to (an|any)"), _p("legal_and_checks.relatives_at_companies")),
     (_r(r"applied (to|for|with|at)\b.*\b(before|previously|past)|previously applied|applied .*before|past application"),
      lambda f, c, s, n: c.applied_before(s.company)),
     (_r(r"(previously|ever|currently|formerly|former|current) (been )?(employed|worked|an employee)|"
         r"worked (for|at) .*before|former employee|current employee|employee of"),
      _p("legal_and_checks.previously_employed_by_any_company")),
-    (_r(r"certify|attest|acknowledge|i agree|agree to|consent|privacy|terms and conditions|accurate|"
+    (_r(r"certify|attest|acknowledge|i agree|agree to|consent|privacy|terms (and )?conditions|terms of (use|service)|accurate|"
         r"true and complete|i understand|read and understand"), _acknowledge),
 ]
 
 
 def _addr(part: str) -> Callable:
     return lambda f, c, s, n: c.profile.get(f"identity.address_permanent.{part}")
+
+
+def _full_address(f, c, s, n):
+    a = c.profile.get("identity.address_permanent") or {}
+    return f"{a.get('street')}, {a.get('city')}, {a.get('state')} {a.get('zip')}" if a else None
 
 
 def _full_name(f, c, s, n):
@@ -337,7 +380,8 @@ def _class_standing(f, c, s, n):
 def _hear(f, c, s, n):
     h = c.profile.get("preferences.how_did_you_hear") or {}
     if f.type in ("select", "radio", "multiselect"):
-        return Choice(h.get("select", "Other"), (h.get("select", "Other"), "other"))
+        return Choice(h.get("select", "Other"), (h.get("select", "Other"), "other", "job board", "online job board",
+                                                 "job posting", "internet", "website", "online"))
     return h.get("text")
 
 
@@ -392,6 +436,10 @@ STANDARD: list[Rule] = [
     (_r(r"github"), _p("identity.github")),
     (_r(r"website|portfolio|personal (site|url)|other (link|url|profile)"), _p("identity.github")),
     (_r(r"pronoun"), lambda f, c, s, n: Choice(c.profile.get("identity.pronouns"), ("he him", "he/him", "he him his"))),
+    (_r(r"highest (level of )?(education|degree)|most recently completed|education level completed"),
+     lambda f, c, s, n: Choice("High School Diploma", ("high school diploma or ged", "high school diploma",
+                                                       "high school or equivalent", "high school", "ged"))),
+    (_r(r"(home|mailing|permanent|current|full) address"), _full_address),
     (_r(r"^(street )?address( line 1)?$|street"), _addr("street")),
     (_r(r"^city$|city of residence"), _addr("city")),
     (_r(r"^state|province|region"), lambda f, c, s, n: Choice(c.profile.get("identity.address_permanent.state"),
@@ -448,8 +496,9 @@ SYSTEM = (
     "You fill in internship application questions for the candidate described in FACTS. Use only FACTS and the "
     "job posting. Never invent experience, skills, employers, numbers, dates, or personal details. Write in the "
     "first person, plainly and specifically, within any max_length. For select/radio questions answer with one "
-    "option copied exactly; for multiselect put exact options in choices. If a question cannot be answered "
-    "truthfully from FACTS, set unsure=true. confidence is 0-1."
+    "option copied exactly; for multiselect put exact options in choices. Questions starting with 'If ...' depend "
+    "on the previous question: if they do not apply given your other answers, return an empty answer with "
+    "unsure=false. If a question cannot be answered truthfully from FACTS, set unsure=true. confidence is 0-1."
 )
 
 _FACT_KEYS = ("education", "availability", "preferences.relocate", "preferences.work_modes", "languages",
@@ -490,6 +539,17 @@ def _accept_draft(f: FormField, d: DraftAnswer | None) -> Any:
     return text
 
 
+def _triggers_followup(value: Any) -> bool:
+    """Does the parent answer open an 'If yes/other, please specify' follow-up?"""
+    vals = value if isinstance(value, list) else [value]
+    for v in vals:
+        if v is True:
+            return True
+        if isinstance(v, str) and (re.match(r"^(yes|y)\b", norm(v)) or re.search(r"\bother\b", norm(v))):
+            return True
+    return False
+
+
 # --- entry point -------------------------------------------------------------------------------------------
 
 
@@ -510,22 +570,41 @@ def resolve(spec: FormSpec, ctx: AnswerContext) -> Resolution:
         res.answers[f.id] = Resolved(fitted, source)
         return True
 
-    for f in spec.fields:
-        n = norm(f.label)
+    def by_rules(f: FormField, n: str) -> str:
+        """'done' | 'failed' (never goes to the LLM) | 'open' (bank/LLM may answer)."""
         if f.type == "file":
-            if not settle(f, _file_rule(f, ctx, spec, n), "file"):
-                failed.append(f)
-            continue
+            return "done" if settle(f, _file_rule(f, ctx, spec, n), "file") else "failed"
         if rule := _first_rule(SENSITIVE, n):
-            if not settle(f, rule(f, ctx, spec, n), "sensitive"):
-                failed.append(f)  # never falls through to the bank or LLM
-            continue
+            return "done" if settle(f, rule(f, ctx, spec, n), "sensitive") else "failed"
         if (rule := _first_rule(STANDARD, n)) and settle(f, rule(f, ctx, spec, n), "profile"):
-            continue
+            return "done"
         entry = next((b for b in ctx.bank if re.search(b.pattern, f.label, re.I)), None)
         if entry and settle(f, entry.answer, "bank"):
-            continue
-        unresolved.append(f)
+            return "done"
+        return "open"
+
+    prev: FormField | None = None
+    conditional: set[str] = set()
+    for f in spec.fields:
+        n = norm(f.label)
+        parent, prev = prev, f
+        if CONDITIONAL.match(n) and parent is not None:
+            if parent in unresolved:  # parent is answered by the LLM below: it decides whether this applies
+                conditional.add(f.id)
+                unresolved.append(f)
+                continue
+            parent_ans = res.answers.get(parent.id)
+            if parent_ans is None or not _triggers_followup(parent_ans.value):
+                res.blank_optional.append(f.id)
+                continue
+            if _first_rule(STANDARD, norm(parent.label)) is _hear and settle(
+                    f, (ctx.profile.get("preferences.how_did_you_hear") or {}).get("text"), "profile"):
+                continue
+        outcome = by_rules(f, n)
+        if outcome == "failed":
+            failed.append(f)
+        elif outcome == "open":
+            unresolved.append(f)
 
     llm_error = None
     if unresolved and ctx.llm is not None:
@@ -535,7 +614,11 @@ def resolve(spec: FormSpec, ctx: AnswerContext) -> Resolution:
             drafts, llm_error = {}, str(e)
         still = []
         for f in unresolved:
-            value = _accept_draft(f, drafts.get(f.id))
+            d = drafts.get(f.id)
+            if f.id in conditional and d is not None and not d.unsure and not (d.answer.strip() or d.choices):
+                res.blank_optional.append(f.id)  # follow-up that does not apply
+                continue
+            value = _accept_draft(f, d)
             if value is None:
                 still.append(f)
             else:
