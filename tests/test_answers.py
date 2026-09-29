@@ -328,3 +328,29 @@ def test_export_control_status_lists():
     r2 = resolve(spec(F("e", "This position requires access to technology subject to export controls, such as EAR. "
                              "Are you any of the following?", "radio", options=o2)), ctx())
     assert r2.answers["e"].value == o2[0]
+
+
+def test_sponsorship_visa_type_list():
+    r = resolve(spec(F("v", "For this specific internship, will you require any of the below sponsorship for employment?",
+                       "radio", options=("J1", "F1", "None", "Other"))), ctx())
+    assert r.answers["v"].value == "None"
+
+
+def test_age_notice_acknowledged():
+    lab = ("In any materials you submit, you may redact or remove age-identifying information such as age, date of "
+           "birth, or dates of school attendance or graduation.")
+    r = resolve(spec(F("n", lab, "multiselect", options=("I Acknowledge",))), ctx())
+    assert r.ok and r.answers["n"].value == ["I Acknowledge"]
+
+
+def test_citizenship_country_list():
+    r = resolve(spec(F("c", "Please indicate which country is your most recent country of citizenship", "select",
+                       options=("Canada", "United States", "Mexico"))), ctx())
+    assert r.answers["c"].value == "United States"
+
+
+@pytest.mark.parametrize("label", ["Please tell us how you heard about this internship opportunity.",
+                                   "How did you first learn about Grow Therapy?"])
+def test_hear_variants(label):
+    r = resolve(spec(F("h", label, "select", options=("Friend", "Other"))), ctx())
+    assert r.answers["h"].value == "Other"

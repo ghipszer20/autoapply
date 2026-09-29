@@ -10,7 +10,7 @@ import httpx
 
 from ..answers import Resolved
 from ..forms import FormField, FormSpec
-from .base import AdapterError, SubmitResult, best_option, query_for
+from .base import AdapterError, SubmitResult, best_option, query_for, real_options, settle
 
 GRAPHQL = "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobPosting"
 QUERY = """query ApiJobPosting($organizationHostedJobsPageName: String!, $jobPostingId: String!) {
@@ -97,7 +97,7 @@ class AshbyAdapter:
             page.wait_for_selector("[data-field-path]", timeout=25_000)
         except Exception as e:
             raise AdapterError(f"no application form at {page.url}") from e
-        page.wait_for_load_state("networkidle", timeout=20_000)
+        settle(page)
         return build_spec(job, company=company, title=title, url=target)
 
     def fill(self, page, spec: FormSpec, answers: dict[str, Resolved]) -> list[str]:

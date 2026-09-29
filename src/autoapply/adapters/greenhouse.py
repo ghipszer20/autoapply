@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..answers import Resolved
 from ..forms import FormField, FormSpec
-from .base import AdapterError, SubmitResult, best_option, query_for
+from .base import AdapterError, SubmitResult, best_option, query_for, real_options, settle
 
 # Education block and other system fields have terse labels; give the resolver unambiguous ones.
 LABEL_OVERRIDES = [
@@ -96,10 +96,10 @@ def build_spec(raw: list[dict], *, company: str, title: str, url: str, descripti
         if kind == "combobox" and TYPEAHEAD.match(fid):
             kind, ftype = "typeahead", "text"
         elif kind == "combobox":
-            options = tuple(combobox_options.get(fid, ()))
+            options = real_options(combobox_options.get(fid, ()))
             ftype = "select"
         elif kind == "nativeselect":
-            options, ftype = tuple(o for o in r["options"] if o.lower() not in ("select...", "please select", "")), "select"
+            options, ftype = real_options(r["options"]), "select"
         elif kind == "checkboxes":
             options, ftype = tuple(r["options"]), "multiselect"
             option_ids[fid] = r["optionIds"]
@@ -145,7 +145,7 @@ class GreenhouseAdapter:
             page.wait_for_selector("#application-form, form#application_form", timeout=20_000)
         except Exception as e:
             raise AdapterError(f"no application form at {page.url} (closed posting?)") from e
-        page.wait_for_load_state("networkidle", timeout=20_000)
+        settle(page)
         form = page.query_selector("#application-form") or page.query_selector("form#application_form")
         raw = form.evaluate(EXTRACT_JS)
         combos = {r["id"]: _combobox_options(page, r["id"]) for r in raw

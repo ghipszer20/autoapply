@@ -189,7 +189,13 @@ def _sponsorship(f, c, s, n):
     if needs is None:
         return UNANSWERABLE
     if f.options and pick_bool(f.options, needs) is None:
-        return _statement(f, needs) or UNANSWERABLE
+        if st := _statement(f, needs):
+            return st
+        if not needs:  # visa-type lists: J1 / F1 / H1B / None / Other
+            opt = pick(f.options, ("none", "not applicable", "n a", "no sponsorship required", "no sponsorship"))
+            if opt:
+                return Choice(opt, (opt,))
+        return UNANSWERABLE
     return needs if "future" in n or "now" not in n else bool(now)
 
 
@@ -207,8 +213,11 @@ def _citizen(f, c, s, n):
     cit = c.profile.get("work_authorization.us_citizen")
     if cit is None:
         return UNANSWERABLE
-    if f.options and pick_bool(f.options, True) is None:  # status list, not yes/no
-        return Choice("U.S. Citizen", ("us citizen", "u s citizen", "united states citizen", "citizen")) if cit else UNANSWERABLE
+    if f.options and pick_bool(f.options, True) is None:  # status list or country list, not yes/no
+        if not cit:
+            return UNANSWERABLE
+        return Choice("U.S. Citizen", ("us citizen", "u s citizen", "united states citizen", "citizen",
+                                       "united states", "united states of america", "usa"))
     return bool(cit)
 
 
@@ -246,6 +255,13 @@ def _hispanic(f, c, s, n):
     if f.options and pick_bool(f.options, v) is None:
         return Choice("", ("hispanic or latino",) if v else ("not hispanic or latino", "non hispanic", "no"))
     return v
+
+
+def _notice_or_unanswerable(f, c, s, n):
+    """A notice that merely mentions age/DOB and asks for an acknowledgement is fine to acknowledge."""
+    if f.options and all(_AGREE.search(norm(o)) for o in f.options) and len(f.options) == 1:
+        return _acknowledge(f, c, s, n)
+    return UNANSWERABLE
 
 
 def _export(f, c, s, n):
@@ -294,7 +310,7 @@ SENSITIVE: list[Rule] = [
     (_r(r"disabilit"), _eeo("disability_status")),
     # attestations the profile has no answer for: never let the LLM decide
     (_r(r"government official|public official|politically exposed|debarred|sanction|social security|\bssn\b|"
-        r"date of birth|\bdob\b|^age$|what is your age|how old"), lambda f, c, s, n: UNANSWERABLE),
+        r"date of birth|\bdob\b|^age$|what is your age|how old"), lambda f, c, s, n: _notice_or_unanswerable(f, c, s, n)),
     (_r(r"18 years|at least 18|over 18|age of 18|legal age|\b18 or older"), _p("legal_and_checks.over_18")),
     (_r(r"background (check|screen|investigation)"), _p("legal_and_checks.background_check_consent")),
     (_r(r"drug (test|screen)"), _p("legal_and_checks.drug_test_consent")),
@@ -502,7 +518,9 @@ STANDARD: list[Rule] = [
     (_r(r"start date|earliest (start|available)|available to start|when can you start|availability start"),
      lambda f, c, s, n: _fmt_date(f, _term_dates(c, s)[0])),
     (_r(r"end date|last day|available until"), lambda f, c, s, n: _fmt_date(f, _term_dates(c, s)[1])),
-    (_r(r"how did you (hear|find|learn)|where did you (hear|find|learn)|^source$|referral source"), _hear),
+    (_r(r"how (did |do )?you (first )?(hear|heard|find|found|learn|learned|discover|come across)|"
+        r"where did you (first )?(hear|find|learn|see)|hear about (us|this)|learn about (us|this)|^source$|"
+        r"referral source|how were you referred"), _hear),
     (_r(r"relocat"), lambda f, c, s, n: c.profile.get("preferences.relocate") not in (None, False, "no")),
     (_r(r"salary|compensation|pay (expectation|requirement)|desired (pay|rate)|hourly (rate|pay)|expected pay"), _salary),
     (_r(r"on site|onsite|in office|in person|hybrid|remote|work (mode|arrangement|location preference)"), _work_mode),

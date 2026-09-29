@@ -25,6 +25,22 @@ US_STATES = {
 _STOP = {"of", "the", "at", "and"}
 
 
+PLACEHOLDER = re.compile(r"^((please )?(select|choose)( one| an option)?(\s*\.\.\.|…)?|-+|—+|)$", re.I)
+
+
+def real_options(options) -> tuple[str, ...]:
+    """Drop placeholder entries such as 'Select...', 'Please select one...', '--'."""
+    return tuple(o for o in options if not PLACEHOLDER.match(o.strip()))
+
+
+def settle(page, timeout: int = 15_000) -> None:
+    """Wait for network idle, but never fail on pages that keep polling (analytics, chat widgets)."""
+    try:
+        page.wait_for_load_state("networkidle", timeout=timeout)
+    except Exception:  # noqa: BLE001 - best effort
+        page.wait_for_timeout(1500)
+
+
 class AdapterError(Exception):
     """The page did not look like the form we expected (layout change, closed posting, ...)."""
 

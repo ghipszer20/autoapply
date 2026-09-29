@@ -9,7 +9,7 @@ import httpx
 
 from ..answers import Resolved
 from ..forms import FormField, FormSpec
-from .base import AdapterError, SubmitResult, best_option, query_for
+from .base import AdapterError, SubmitResult, best_option, query_for, real_options
 
 _URL = re.compile(r"jobs\.lever\.co/([^/?#]+)/([0-9a-f-]{36})")
 
@@ -65,7 +65,7 @@ def build_spec(raw: list[dict], *, company: str, title: str, url: str, descripti
         label = BASE_LABELS.get(name) or _clean(r["label"])
         if not label:
             continue
-        options = tuple(o for o in r["options"] if o and not o.lower().startswith("select"))
+        options = real_options(r["options"])
         ftype = {"select": "select", "textarea": "textarea", "file": "file", "radio": "radio",
                  "checkboxes": "multiselect"}.get(kind, "text")
         kinds[name] = kind

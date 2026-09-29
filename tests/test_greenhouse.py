@@ -47,3 +47,9 @@ def test_build_spec():
     assert by["question_1"].type == "select" and by["question_1"].options == ("Yes", "No")
     assert by["question_2[]"].type == "multiselect" and spec.meta["option_ids"]["question_2[]"][1] == "question_2[]_2"
     assert by["question_3"].max_length == 500 and by["resume"].type == "file"
+
+
+def test_real_options_drops_placeholders():
+    from autoapply.adapters.base import real_options
+    assert real_options(["Select...", "Please select one...", "Select ...", "--", "", "Selected Works", "Yes"]) == \
+        ("Selected Works", "Yes")
