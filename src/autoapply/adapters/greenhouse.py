@@ -123,11 +123,34 @@ def _loc(page, fid: str):
 
 def _combobox_options(page, fid: str) -> list[str]:
     box = _loc(page, fid)
-    box.click()
-    page.wait_for_timeout(250)
-    opts = page.eval_on_selector_all(f'[id^="react-select-{fid}-option-"]', "os => os.map(o => o.innerText.trim())")
+    sel = f'[id^="react-select-{fid}-option-"]'
+    for attempt in range(3):  # headed Chrome sometimes swallows the first click: wait for the menu, retry
+        if attempt == 0:
+            box.click()
+        else:
+            box.focus()
+            page.keyboard.press("ArrowDown")
+        try:
+            page.wait_for_selector(sel, timeout=2500)
+            break
+        except Exception:  # noqa: BLE001
+            page.keyboard.press("Escape")
+    else:
+        return []
+    seen: dict[str, None] = {}
+    for _ in range(60):  # long menus render lazily in real Chrome: scroll until no new options appear
+        before = len(seen)
+        seen.update(dict.fromkeys(page.eval_on_selector_all(sel, "os => os.map(o => o.innerText.trim())")))
+        moved = page.evaluate(
+            """(fid) => { const l = document.getElementById(`react-select-${fid}-listbox`);
+                          if (!l) return false;
+                          const m = l.scrollHeight > l.clientHeight ? l : l.parentElement;
+                          const t = m.scrollTop; m.scrollTop = m.scrollHeight; return m.scrollTop !== t; }""", fid)
+        if len(seen) == before and not moved:
+            break
+        page.wait_for_timeout(120)
     page.keyboard.press("Escape")
-    return opts
+    return list(seen)
 
 
 class GreenhouseAdapter:
