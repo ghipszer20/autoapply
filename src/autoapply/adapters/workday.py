@@ -119,7 +119,12 @@ class WorkdayAdapter:
                     if page.query_selector("[data-automation-id=progressBarActiveStep]") else "")
             if re.search(r"review", step, re.I):
                 shot = screenshot("review")
-                result = self._submit(page)
+                try:
+                    result = self._submit(page)
+                except Exception as e:  # noqa: BLE001 - clicked or not, never retry automatically
+                    result = SubmitResult("failed", f"{type(e).__name__}: {str(e)[:120]}")
+                if result.status == "failed":
+                    result = SubmitResult("manual", f"unconfirmed submit, check screenshot: {result.detail}")
                 return {"status": result.status, "reason": result.detail, "answers": answers,
                         "description": description, "screenshot": shot}
             spec = self._read_page(page, company, title, description)
