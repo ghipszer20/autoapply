@@ -9,7 +9,7 @@ import httpx
 
 from ..answers import Resolved
 from ..forms import FormField, FormSpec
-from .base import AdapterError, SubmitResult
+from .base import AdapterError, SubmitResult, best_option, query_for
 
 _URL = re.compile(r"jobs\.lever\.co/([^/?#]+)/([0-9a-f-]{36})")
 
@@ -127,11 +127,27 @@ class LeverAdapter:
                 elif kind in ("radio", "checkboxes"):
                     for opt in value if isinstance(value, list) else [value]:
                         page.locator(f'input{sel}[value="{values[name][opt]}"]').check()
+                elif name == "location":
+                    self._location(page, str(value))
                 else:
                     page.locator(sel).first.fill(str(value))
             except Exception as e:  # noqa: BLE001
                 problems.append(f"{f.label[:60]}: {type(e).__name__}: {str(e)[:120]}")
         return problems
+
+    @staticmethod
+    def _location(page, value: str) -> None:
+        """Lever's location box only offers suggestions on real keystrokes; a suggestion must be clicked."""
+        box = page.locator('input[name="location"]')
+        box.fill("")
+        box.press_sequentially(query_for(value), delay=90)
+        results = page.locator(".dropdown-results > div")
+        results.first.wait_for(timeout=10_000)
+        opts = [t.strip() for t in results.all_inner_texts()]
+        pick = best_option(opts, value) or best_option(opts, query_for(value))
+        if pick is None:
+            raise AdapterError(f"no location suggestion for {value!r} among {opts[:5]}")
+        results.nth(opts.index(pick)).click()
 
     def submit(self, page) -> SubmitResult:
         page.locator("#btn-submit, button[type=submit]").last.click()

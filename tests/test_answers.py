@@ -295,3 +295,36 @@ def test_cover_generated_only_when_application_proceeds():
     s = spec(F("cl", "Cover Letter", "file", required=False), F("q", "Why us?", "textarea"))
     r = resolve(s, ctx(llm=FakeLLM([DraftAnswer(id="q", unsure=True)]), cover=lambda sp: calls.append(1) or Path("c.pdf")))
     assert not r.ok and calls == []
+
+
+def test_single_statement_consent_checkbox():
+    stmt = "By applying for this position, I agree that my data will be processed as per Immuta's Privacy Policy."
+    r = resolve(spec(F("c", stmt, "multiselect", options=(stmt,))), ctx())
+    assert r.ok and r.answers["c"].value == [stmt]
+    r2 = resolve(spec(F("c", stmt, "multiselect", required=False, options=("Contact me about future jobs",))), ctx())
+    assert "c" in r2.blank_optional
+
+
+def test_current_company_is_school():
+    assert resolve(spec(F("o", "Current company")), ctx()).answers["o"].value == "University of Maryland, College Park"
+
+
+@pytest.mark.parametrize(("options", "want"), [
+    (("On a 4.0 scale.", "4.0", "3.9", "3.8"), "3.9"),
+    (("Below 3.0", "3.0 - 3.49", "3.5 - 4.0"), "3.5 - 4.0"),
+    (("3.75+", "3.5+", "Below 3.5"), "3.75+"),
+])
+def test_gpa_buckets(options, want):
+    assert resolve(spec(F("g", "What is your current overall GPA?", "select", options=options)), ctx()).answers["g"].value == want
+
+
+def test_export_control_status_lists():
+    o1 = ("U.S. person. This status includes U.S. citizens, U.S. nationals, lawful permanent residents.",
+          "Foreign person. This ITAR/EAR status includes anyone who is not a U.S. person (see above).")
+    r = resolve(spec(F("e", "The person hired will have access to items subject to U.S. export controls", "select",
+                       options=o1)), ctx())
+    assert r.answers["e"].value == o1[0]
+    o2 = ("A United States Citizen", "A lawful permanent resident of the United States", "A protected individual", "Other")
+    r2 = resolve(spec(F("e", "This position requires access to technology subject to export controls, such as EAR. "
+                             "Are you any of the following?", "radio", options=o2)), ctx())
+    assert r2.answers["e"].value == o2[0]

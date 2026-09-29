@@ -248,13 +248,39 @@ def _hispanic(f, c, s, n):
     return v
 
 
+def _export(f, c, s, n):
+    """U.S.-person status for ITAR/EAR; handles yes/no and status-list wordings."""
+    us_person = c.profile.get("work_authorization.us_person_export_control")
+    if us_person is None:
+        return UNANSWERABLE
+    if not f.options or pick_bool(f.options, bool(us_person)) is not None:
+        return bool(us_person)
+    if not us_person:
+        return UNANSWERABLE
+    cands = ("a united states citizen", "united states citizen", "u s citizen", "us citizen") \
+        if c.profile.get("work_authorization.us_citizen") else ()
+    opt = pick(f.options, (*cands, "u s person", "us person"))
+    return Choice(opt, (opt,)) if opt and not re.search(r"\b(foreign|not a u s)\b", norm(opt)) else UNANSWERABLE
+
+
+_AGREE = re.compile(r"\b(yes|agree|accept|acknowledge|consent|certify|understand|confirm|i have read)\b")
+
+
 def _acknowledge(f, c, s, n):
-    return True if f.required else BLANK
+    if not f.required:
+        return BLANK
+    if f.options and pick_bool(f.options, True) is None:
+        agreeing = [o for o in f.options if _AGREE.search(norm(o)) and not re.search(r"\b(not|disagree|decline)\b", norm(o))]
+        if len(f.options) == 1 or len(agreeing) == 1:
+            opt = f.options[0] if len(f.options) == 1 else agreeing[0]
+            return [Choice(opt, (opt,))] if f.type in ("multiselect", "checkbox") else Choice(opt, (opt,))
+        return UNANSWERABLE
+    return True
 
 
 SENSITIVE: list[Rule] = [
     (_r(r"sponsor|visa|h 1b|h1b|immigration"), _sponsorship),
-    (_r(r"export|itar|\bear\b|u s person|us person"), _p("work_authorization.us_person_export_control")),
+    (_r(r"export|itar|\bear\b|u s person|us person"), _export),
     (_r(r"clearance"), _clearance),
     (_r(r"authori[sz]ed to work|work authori[sz]ation|eligib\w* to work|legally (able|permitted|entitled)|right to work"),
      _authorized),
@@ -319,7 +345,20 @@ def _gpa(f, c, s, n):
     if "scale" in n or "out of" in n:
         return "4.0"
     gpa = c.profile.get("education.gpa")
-    return None if gpa is None else f"{float(gpa):.2f}"
+    if gpa is None:
+        return None
+    gpa = float(gpa)
+    if f.options:  # bucketed choices: "3.9", "3.5 - 4.0", "Above 3.5", "3.75+"
+        for opt in f.options:
+            nums = [float(x) for x in re.findall(r"\d\.\d+|\d(?=\.?\s|$)", opt)]
+            o = opt.lower()
+            if len(nums) >= 2 and nums[0] <= gpa <= nums[1] and nums[0] < nums[1]:
+                return Choice(opt, (opt,))
+            if len(nums) == 1 and (("+" in o or "above" in o or "or higher" in o or "greater" in o) and gpa >= nums[0]):
+                return Choice(opt, (opt,))
+        trunc = f"{int(gpa * 10) / 10:.1f}"  # 3.912 -> 3.9 (never round up)
+        return Choice(trunc, (f"{gpa:.2f}", trunc))
+    return f"{gpa:.2f}"
 
 
 _MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
@@ -432,6 +471,8 @@ STANDARD: list[Rule] = [
     (_r(r"^(full |legal |your )?name$|^full legal name"), _full_name),
     (_r(r"e ?mail"), _p("identity.email")),
     (_r(r"phone|mobile|cell"), _p("identity.phone")),
+    (_r(r"current (company|employer|organi[sz]ation)|^(company|employer|organi[sz]ation)$"),
+     lambda f, c, s, n: c.profile.get("education.school")),  # full-time student: the university
     (_r(r"linkedin"), _p("identity.linkedin")),
     (_r(r"github"), _p("identity.github")),
     (_r(r"website|portfolio|personal (site|url)|other (link|url|profile)"), _p("identity.github")),
