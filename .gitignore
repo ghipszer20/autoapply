@@ -1,0 +1,19 @@
+# secrets and personal data
+.env
+*.db
+*.db-journal
+profile.yaml
+answer_bank.yaml
+credentials*.json
+token*.json
+data/
+browser_profile/
+screenshots/
+logs/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
