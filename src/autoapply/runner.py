@@ -37,6 +37,10 @@ def adapters() -> dict:
 
     out["lever"] = LeverAdapter()
     out["workday"] = WorkdayAdapter()  # pilot: only used when "workday" is in run.ats_enabled or passed via --ats
+    from .adapters.generic import HOSTS, GenericAdapter
+
+    generic = GenericAdapter()
+    out.update({name: generic for name in HOSTS.values()})
     return out
 
 

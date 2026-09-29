@@ -96,6 +96,8 @@ def upsert_postings(conn: sqlite3.Connection, postings: Iterable[Posting], now: 
         ats, url = row["ats"], row["url"]
         if ats == "third_party" and ref.ats != "third_party":  # company's own site wins
             ats, url = ref.ats, ref.canonical_url
+        elif ats == "other" and ref.ats not in ("other", "third_party"):  # classifier learned this host
+            ats = ref.ats
         conn.execute(
             "UPDATE postings SET ats = ?, url = ?, sources = ?, locations = ?, terms = ?, category = ?,"
             " degrees = ?, sponsorship = ?, posted_at = COALESCE(posted_at, ?), last_seen = ? WHERE key = ?",

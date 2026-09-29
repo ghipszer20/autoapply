@@ -46,3 +46,9 @@ def test_other_ats_keyed_by_canonical_url():
     ref = classify("https://www.tesla.com/careers/search/job/intern-software-engineer-123?utm_source=x")
     assert ref.ats == "other"
     assert ref.key == "url:https://www.tesla.com/careers/search/job/intern-software-engineer-123"
+
+
+def test_simple_ats_hosts():
+    assert classify("https://apply.workable.com/rentvision/j/0F1C7992BF").ats == "workable"
+    assert classify("https://acme.applytojob.com/apply/abc/Intern").ats == "jazzhr"
+    assert classify("https://acme.bamboohr.com/careers/12").ats == "bamboohr"

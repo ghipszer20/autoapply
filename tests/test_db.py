@@ -88,3 +88,12 @@ def test_state_defaults_disabled(tmp_path):
     db.set_state(conn, "enabled", "1")
     assert db.is_enabled(conn) is True
     assert db.get_state(conn, "missing", "x") == "x"
+
+
+def test_other_reclassified_on_upsert(tmp_path):
+    conn = db.connect(tmp_path / "a.db")
+    url = "https://apply.workable.com/rentvision/j/0F1C7992BF"
+    db.upsert_postings(conn, [mk(url=url)], T0)
+    conn.execute("UPDATE postings SET ats='other'")
+    db.upsert_postings(conn, [mk(url=url)], T0)
+    assert conn.execute("SELECT ats FROM postings").fetchone()["ats"] == "workable"

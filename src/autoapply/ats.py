@@ -15,6 +15,9 @@ THIRD_PARTY_HOSTS = (
     "ziprecruiter.com",
     "simplify.jobs",
 )
+# single-page forms handled by adapters/generic.py
+SIMPLE_ATS = {"workable.com": "workable", "applytojob.com": "jazzhr", "bamboohr.com": "bamboohr",
+              "breezy.hr": "breezy", "rippling.com": "rippling", "jobvite.com": "jobvite"}
 TRACKING_PARAMS = {
     "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
     "ref", "src", "source", "mobile", "needsredirect", "embed", "ats",
@@ -63,6 +66,8 @@ def classify(url: str) -> AtsRef:
         return AtsRef("icims", f"icims:{host.split('.')[0]}:{m.group(1)}", canonical)
     if host.endswith("smartrecruiters.com") and (m := re.match(r"^/[^/]+/(\d+)", path)):
         return AtsRef("smartrecruiters", f"smartrecruiters:{m.group(1)}", canonical)
+    if simple := next((name for h, name in SIMPLE_ATS.items() if host == h or host.endswith("." + h)), None):
+        return AtsRef(simple, f"url:{canonical}", canonical)
     if any(host == h or host.endswith("." + h) for h in THIRD_PARTY_HOSTS):
         return AtsRef("third_party", f"url:{canonical}", canonical)
     return AtsRef("other", f"url:{canonical}", canonical)
