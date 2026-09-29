@@ -135,6 +135,14 @@ class GenericAdapter:
         return url
 
     def load(self, page, url: str, key: str, company: str, title: str) -> FormSpec:
+        try:
+            return self._load(page, url, company, title)
+        except AdapterError:
+            raise
+        except Exception as e:  # noqa: BLE001 - timeouts, detached nodes: an unsupported page, not a crash
+            raise AdapterError(f"generic form not usable: {type(e).__name__}: {str(e)[:160]}") from e
+
+    def _load(self, page, url: str, company: str, title: str) -> FormSpec:
         page.goto(url, wait_until="domcontentloaded", timeout=60_000)
         settle(page)
         dismiss_cookie_banner(page)
