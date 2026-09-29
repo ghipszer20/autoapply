@@ -1,0 +1,33 @@
+# autoapply configuration (committed; no secrets here)
+filter:
+  categories: ["Software", "AI/ML/Data", "Quant"]      # SimplifyJobs/speedyapply category names
+  allowed_terms: ["Summer 2027", "Fall 2027", "Spring 2027", "Winter 2027"]
+  title_include:                                          # at least one must match (case-insensitive)
+    - 'software|\bswe\b|developer|engineer|programm'
+    - 'data|machine learning|\bml\b|\bai\b|artificial intelligence|analytics'
+  title_exclude:                                          # any match rejects
+    - '\bph\.?d\b|\bmasters?\b|master''s|\bmba\b'
+    - 'hardware|mechanical|electrical|civil|chemical|manufacturing|\basic\b|\bfpga\b|\brf\b'
+    - 'product manag|program manag|\bsales\b|marketing|recruit|designer|\bux\b'
+    - '\btrader\b|trading intern'
+  require_bachelors: true
+  us_only: true
+  us_citizen: true
+
+boards:                    # verified 2026-09-29; token: display name
+  greenhouse:
+    wehrtyou: Hudson River Trading
+    jumptrading: Jump Trading
+    imc: IMC
+    optiverus: Optiver
+    drweng: DRW
+    schonfeld: Schonfeld
+    virtu: Virtu Financial
+    towerresearchcapital: Tower Research Capital
+    akunacapital: Akuna Capital
+    point72: Point72
+    clearstreet: Clear Street
+    flowtraders: Flow Traders
+  lever:
+    belvederetrading: Belvedere Trading
+  ashby: {}
