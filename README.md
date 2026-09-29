@@ -37,6 +37,14 @@ Design: `docs/superpowers/specs/2026-09-29-autoapply-design.md`
 `gaps` lists the questions that most often cause skips: add answers to `profile.yaml` or `answer_bank.yaml`,
 then `autoapply retry skipped`.
 
+## Workday (pilot, 600+ postings)
+Workday needs an account per company, so dry runs stop at the account page. To enable it:
+1. Watch one real run: `.venv/Scripts/autoapply apply <workday key> --live --headed` (keys: `workday:<tenant>:<req id>`,
+   e.g. from `sqlite3 autoapply.db "select key from postings where ats='workday' and eligible=1 limit 5"`).
+   The account password is generated and stored in Windows Credential Manager (`autoapply-workday`).
+2. If it submitted cleanly, add `workday` to `run.ats_enabled` in `config.yaml`.
+Tenants that email a verification link need Gmail set up (below); otherwise they land on the manual list.
+
 ## Optional: job-alert emails (LinkedIn / Indeed / Handshake)
 1. Google Cloud Console -> create a project -> enable the Gmail API -> OAuth consent screen (External, add
    yourself as a test user) -> Credentials -> OAuth client ID -> *Desktop app* -> download JSON.
