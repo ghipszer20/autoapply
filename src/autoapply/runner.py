@@ -127,7 +127,7 @@ def run_cycle(cfg: Config, conn: sqlite3.Connection, *, live: bool, limit: int |
         return rep
     all_adapters = adapters()
     use_ats = [a for a in (ats or cfg.run.ats_enabled) if a in all_adapters]
-    cands = db.candidates(conn, use_ats, limit=target * 6)
+    cands = db.candidates(conn, use_ats, limit=target * 6, skip_dry_run=not live)
     if not cands:
         rep.add("no eligible postings left for " + ", ".join(use_ats))
         return rep

@@ -183,17 +183,20 @@ def record_application(conn: sqlite3.Connection, key: str, status: str, reason: 
     conn.commit()
 
 
-def candidates(conn: sqlite3.Connection, ats: Iterable[str], limit: int) -> list[sqlite3.Row]:
-    """Eligible postings not yet finished, newest first. Failed ones get MAX_ATTEMPTS tries; dry runs don't count."""
+def candidates(conn: sqlite3.Connection, ats: Iterable[str], limit: int, *,
+               skip_dry_run: bool = False) -> list[sqlite3.Row]:
+    """Eligible postings not yet finished, newest first. Failed ones get MAX_ATTEMPTS tries; dry runs don't block
+    live ones (skip_dry_run=True lets a dry pass move on to forms it hasn't seen)."""
     ats = list(ats)
     marks = ",".join("?" * len(ats))
-    final = ",".join("?" * len(FINAL_STATUSES))
+    statuses = (*FINAL_STATUSES, "dry_run") if skip_dry_run else FINAL_STATUSES
+    final = ",".join("?" * len(statuses))
     return conn.execute(
         f"SELECT p.* FROM postings p LEFT JOIN applications a ON a.key = p.key"
         f" WHERE p.eligible = 1 AND p.ats IN ({marks})"
         f" AND (a.key IS NULL OR (a.status NOT IN ({final}) AND NOT (a.status = 'failed' AND a.attempts >= ?)))"
         f" ORDER BY COALESCE(p.posted_at, p.first_seen) DESC, p.key LIMIT ?",
-        (*ats, *FINAL_STATUSES, MAX_ATTEMPTS, limit),
+        (*ats, *statuses, MAX_ATTEMPTS, limit),
     ).fetchall()
 
 
