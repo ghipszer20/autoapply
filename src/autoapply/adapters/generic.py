@@ -25,12 +25,18 @@ EXTRACT_JS = r"""
     const lb = e.getAttribute('aria-labelledby');
     if (lb) { const t = lb.split(' ').map(i => txt(document.getElementById(i))).join(' ').trim(); if (t) return t; }
     if (e.getAttribute('aria-label')) return e.getAttribute('aria-label');
+    const ph = (e.placeholder || '').trim();
+    if (ph.length > 1 && !/^(type|enter|select|choose|search|e\.g|ex\b|your answer|start typing|\.\.\.)/i.test(ph)) return ph;
     let c = e.parentElement;
     for (let i = 0; i < 4 && c; i++, c = c.parentElement) {
-      const l = c.querySelector('label, legend, [class*=label], [class*=Label]');
-      if (l && txt(l) && !l.contains(e)) return txt(l);
+      // the nearest label that isn't bound to a different control, and whose group holds only this control
+      const l = [...c.querySelectorAll('label, legend, [class*=label], [class*=Label]')].find(x =>
+          txt(x) && !x.contains(e) && (!x.htmlFor || x.htmlFor === e.id));
+      const controls = c.querySelectorAll('input:not([type=hidden]), textarea, select').length;
+      if (l && controls === 1) return txt(l);
+      if (l && controls > 1 && i === 0) return txt(l);
     }
-    return e.placeholder || e.name || '';
+    return '';  // unlabelled: never guess what a field means
   };
   const out = [], seen = new Set();
   const all = [...document.querySelectorAll('input, textarea, select')].filter(e =>

@@ -316,6 +316,9 @@ def _acknowledge(f, c, s, n):
 
 
 SENSITIVE: list[Rule] = [
+    # bot traps: must stay empty even when marked required
+    (_r(r"leave (this )?(field )?(blank|empty)|robots? only|for robots|do not (fill|enter|complete)|if you are (a )?human"),
+     lambda f, c, s, n: BLANK),
     (_r(r"sponsor|visa|h 1b|h1b|immigration"), _sponsorship),
     (_r(r"export|itar|\bear\b|u s person|us person"), _export),
     (_r(r"clearance"), _clearance),
@@ -565,7 +568,8 @@ STANDARD: list[Rule] = [
     (_r(r"\bdegree\b"), _degree),
     (_r(r"major|discipline|field of study|area of study|concentration"), _major),
     (_r(r"\bminor\b"), _p("education.minor")),
-    (_r(r"start date|earliest (start|available)|available to start|when can you start|availability start"),
+    (_r(r"start date|earliest (start|available)|available to start|when can you start|availability start|"
+        r"date available|available (start )?date|availability date|when (are you|would you be) available"),
      lambda f, c, s, n: _fmt_date(f, _term_dates(c, s)[0])),
     (_r(r"end date|last day|available until"), lambda f, c, s, n: _fmt_date(f, _term_dates(c, s)[1])),
     (_r(r"how (did |do )?you (first )?(hear|heard|find|found|learn|learned|discover|come across)|"

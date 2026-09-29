@@ -40,6 +40,13 @@ class ApplyDeps:
     cover_dir: Path
 
 
+def _safe(key: str) -> str:
+    """Filesystem-safe name for a posting key ('url:https://...' keys contain slashes)."""
+    import re
+
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", key)[:120]
+
+
 def _audit(answers) -> dict[str, Any]:
     out = {}
     for fid, a in answers.items():
@@ -80,7 +87,7 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
     if not res.ok:
         return ApplyOutcome("skipped", res.skip_reason or "", **base)
     problems = adapter.fill(page, spec, res.answers)
-    shot = deps.screenshot_dir / today.isoformat() / f"{key.replace(':', '_')}_{'live' if live else 'dry'}.png"
+    shot = deps.screenshot_dir / today.isoformat() / f"{_safe(key)}_{'live' if live else 'dry'}.png"
     shot.parent.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(shot), full_page=True)
     base["screenshot"] = str(shot)
@@ -92,7 +99,7 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
         result = adapter.submit(page)
     except Exception as e:  # noqa: BLE001 - the click may or may not have gone through
         result = SubmitResult("failed", f"submit error: {type(e).__name__}: {str(e)[:150]}")
-    done = deps.screenshot_dir / today.isoformat() / f"{key.replace(':', '_')}_after_submit.png"
+    done = deps.screenshot_dir / today.isoformat() / f"{_safe(key)}_after_submit.png"
     page.screenshot(path=str(done), full_page=True)
     base["screenshot"] = str(done)
     if result.status == "failed":  # submit was clicked: never retry automatically (could apply twice)
@@ -107,7 +114,7 @@ def _apply_flow(page, adapter, *, key, url, company, title, terms, deps: ApplyDe
     cache: dict = {}
 
     def screenshot(tag: str) -> str:
-        path = shots / f"{key.replace(':', '_')}_{tag}.png"
+        path = shots / f"{_safe(key)}_{tag}.png"
         page.screenshot(path=str(path), full_page=True)
         return str(path)
 

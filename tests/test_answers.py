@@ -396,3 +396,15 @@ def test_current_or_former_employee_status_list():
 def test_full_legal_name_has_middle():
     r = resolve(spec(F("n", "Please provide your full legal name as it appears on your government ID"), F("m", "Name")), ctx())
     assert r.answers["n"].value == "Gavin Matthew Hipszer" and r.answers["m"].value == "Gavin Hipszer"
+
+
+def test_honeypot_stays_blank_even_if_required():
+    llm = FakeLLM()
+    r = resolve(spec(F("h", "Please leave this field blank"), F("w", "Enter website. This input is for robots only")),
+                ctx(llm=llm))
+    assert r.ok and "h" not in r.answers and "w" not in r.answers and llm.prompts == []
+
+
+def test_date_available():
+    r = resolve(spec(F("d", "Date Available")), ctx())
+    assert r.answers["d"].value == "05/24/2027"

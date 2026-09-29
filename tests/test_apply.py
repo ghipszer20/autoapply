@@ -61,3 +61,8 @@ def test_live_submit_confirmed(tmp_path):
 def test_unconfirmed_submit_is_final_manual(tmp_path):
     o, _ = run(tmp_path, SubmitResult("failed", "no confirmation"))
     assert o.status == "manual" and "unconfirmed" in o.reason
+
+
+def test_screenshot_name_is_safe():
+    from autoapply.apply import _safe
+    assert _safe("url:https://camba.applytojob.com/apply/wv3/Intern") == "url_https_camba.applytojob.com_apply_wv3_Intern"
