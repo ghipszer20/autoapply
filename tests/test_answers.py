@@ -466,3 +466,17 @@ def test_number_field_llm_answer_coerced():
 def test_gpa_one_decimal_range():
     r = resolve(spec(F("g", "GPA", "select", options=("Below 3.0", "3.0 - 3.4", "3.5 - 3.9", "4.0"))), ctx())
     assert r.answers["g"].value == "3.5 - 3.9"
+
+
+def test_multiple_consent_boxes():
+    opts = ("By clicking this box and submitting your application, you consent to our Applicant Privacy Statement.",
+            "By clicking this box you consent to third-party background checks as part of your application.",
+            "I consent to receive SMS marketing messages.")
+    r = resolve(spec(F("p", "Applicant Privacy Statement", "multiselect", options=opts)), ctx())
+    assert r.answers["p"].value == [opts[0], opts[1]]
+
+
+def test_legal_authorization_region():
+    r = resolve(spec(F("a", "Do you have legal authorization to work in the geographic region specified for this role?",
+                       "select", options=YN)), ctx())
+    assert r.answers["a"].value == "Yes"

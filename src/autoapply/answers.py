@@ -319,8 +319,15 @@ _AGREE = re.compile(r"\b(yes|agree|accept|acknowledge|consent|certify|understand
 def _acknowledge(f, c, s, n):
     if not f.required:
         return BLANK
-    if f.options and pick_bool(f.options, True) is None:
+    multi = f.type in ("multiselect", "checkbox") and len(f.options) > 1
+    if f.options and (multi or pick_bool(f.options, True) is None):
         agreeing = [o for o in f.options if _AGREE.search(norm(o)) and not re.search(r"\b(not|disagree|decline)\b", norm(o))]
+        if multi and len(agreeing) > 1:  # several consent boxes: tick those allowed
+            allowed = [o for o in agreeing
+                       if not (re.search(r"background", norm(o)) and not c.profile.get("legal_and_checks.background_check_consent"))
+                       and not (re.search(r"drug", norm(o)) and not c.profile.get("legal_and_checks.drug_test_consent"))
+                       and not re.search(r"\b(sms|text messages?|marketing|newsletter)\b", norm(o))]
+            return [Choice(o, (o,)) for o in allowed] if allowed else UNANSWERABLE
         if len(f.options) == 1 or len(agreeing) == 1:
             opt = f.options[0] if len(f.options) == 1 else agreeing[0]
             return [Choice(opt, (opt,))] if f.type in ("multiselect", "checkbox") else Choice(opt, (opt,))
@@ -336,7 +343,8 @@ SENSITIVE: list[Rule] = [
     (_r(r"sponsor|visa|h 1b|h1b|immigration"), _sponsorship),
     (_r(r"export|itar|\bear\b|u s person|us person"), _export),
     (_r(r"clearance"), _clearance),
-    (_r(r"authori[sz]ed to work|work authori[sz]ation|eligib\w* to work|legally (able|permitted|entitled)|right to work"),
+    (_r(r"authori[sz]ed to work|authori[sz]ation to work|work authori[sz]ation|eligib\w* to work|"
+        r"legally (able|permitted|entitled)|right to work"),
      _authorized),
     (_r(r"citizen"), _citizen),
     (_r(r"sexual orientation"), _eeo("sexual_orientation")),
