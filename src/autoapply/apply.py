@@ -101,6 +101,20 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
     if not res.ok:
         return ApplyOutcome("skipped", res.skip_reason or "", **base)
     problems = adapter.fill(page, spec, res.answers)
+    if not problems and hasattr(adapter, "rescan"):  # questions revealed by earlier answers
+        try:
+            extra = adapter.rescan(page, spec)
+        except Exception:  # noqa: BLE001 - a rescan failure must not block the application
+            extra = None
+        if extra is not None and extra.fields:
+            more = resolve(extra, AnswerContext(profile=deps.profile, resume_pdf=choice.path,
+                                                resume_text=deps.master_text, bank=deps.bank, llm=deps.llm,
+                                                applied_before=deps.applied_before, today=today))
+            if not more.ok:
+                return ApplyOutcome("skipped", f"revealed question: {more.skip_reason}", **base)
+            problems = adapter.fill(page, extra, more.answers)
+            res.answers.update(more.answers)
+            base["answers"] = _audit(res.answers)
     shot = deps.screenshot_dir / today.isoformat() / f"{_safe(key)}_{'live' if live else 'dry'}.png"
     shot.parent.mkdir(parents=True, exist_ok=True)
     base["screenshot"] = snap(page, shot)

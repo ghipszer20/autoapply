@@ -109,7 +109,24 @@ def _cmd_apply(args, conn) -> int:
         ctx, close = _open_browser(p, live=args.live, headed=args.headed or args.live)
         try:
             page = ctx.new_page()
-            o = apply_one(page, adapters()[row["ats"]], key=row["key"], url=row["url"], company=row["company"],
+            adapter = adapters()[row["ats"]]
+            if args.code and hasattr(adapter, "email_code"):
+                adapter.email_code = lambda: args.code
+            if args.wait_code and hasattr(adapter, "email_code"):
+                code_file = ROOT / "data" / "security_code.txt"
+                code_file.unlink(missing_ok=True)
+
+                def wait_for_code():
+                    import time
+
+                    print("WAITING FOR CODE in data/security_code.txt", flush=True)
+                    for _ in range(180):
+                        if code_file.exists() and code_file.read_text().strip():
+                            return code_file.read_text().strip()
+                        time.sleep(5)
+                    return None
+                adapter.email_code = wait_for_code
+            o = apply_one(page, adapter, key=row["key"], url=row["url"], company=row["company"],
                           title=row["title"], terms=tuple(json.loads(row["terms"])), deps=deps, live=args.live,
                           locations=tuple(json.loads(row["locations"])))
         finally:
@@ -140,6 +157,9 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("key")
     a.add_argument("--live", action="store_true")
     a.add_argument("--headed", action="store_true")
+    a.add_argument("--code", help="emailed security code to enter if the form asks for one")
+    a.add_argument("--wait-code", action="store_true",
+                   help="if a security code is asked for, wait up to 15 min for it in data/security_code.txt")
     d = sub.add_parser("digest")
     d.add_argument("--date")
     rt = sub.add_parser("retry", help="forget outcomes with this status so they are tried again")

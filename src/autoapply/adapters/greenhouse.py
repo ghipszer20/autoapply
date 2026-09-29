@@ -185,6 +185,21 @@ class GreenhouseAdapter:
         return build_spec(raw, company=company, title=title, url=page.url, description=description,
                           combobox_options=combos)
 
+    def rescan(self, page, spec: FormSpec) -> FormSpec:
+        """Questions revealed by earlier answers (e.g. race appears after 'Hispanic/Latino? No')."""
+        form = page.query_selector("#application-form") or page.query_selector("form#application_form")
+        known = set(spec.meta["kinds"])
+        raw = [r for r in form.evaluate(EXTRACT_JS) if r["id"] not in known]
+        combos = {r["id"]: _combobox_options(page, r["id"]) for r in raw
+                  if r["kind"] == "combobox" and not TYPEAHEAD.match(r["id"])}
+        extra = build_spec(raw, company=spec.company, title=spec.title, url=spec.url, description=spec.description,
+                           combobox_options=combos)
+        spec.meta["kinds"].update(extra.meta["kinds"])
+        spec.meta["option_ids"].update(extra.meta["option_ids"])
+        spec.fields.extend(extra.fields)
+        extra.meta = spec.meta
+        return extra
+
     def fill(self, page, spec: FormSpec, answers: dict[str, Resolved]) -> list[str]:
         problems: list[str] = []
         kinds, option_ids = spec.meta["kinds"], spec.meta["option_ids"]
