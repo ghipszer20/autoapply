@@ -63,19 +63,42 @@ def render_html(r: Resume) -> str:
     return f"<!doctype html><html><head><meta charset='utf-8'><style>{CSS}</style></head><body>{''.join(parts)}</body></html>"
 
 
+_shared: dict = {}  # {"pw": Playwright, "browser": headless Browser} when a caller already runs Playwright
+
+
+def use_playwright(pw) -> None:
+    """Called by code that already holds a sync Playwright instance (a second one can't start in-process).
+    PDFs always come from headless Chromium: headed Chrome can't print to PDF."""
+    _shared.clear()
+    if pw is not None:
+        _shared["pw"] = pw
+
+
+def _write_pdf(browser, html: str, out: Path) -> None:
+    page = browser.new_page()
+    try:
+        page.set_content(html, wait_until="load")
+        page.pdf(path=str(out), format="Letter", print_background=True, prefer_css_page_size=True)
+    finally:
+        page.close()
+
+
 def html_to_pdf(html: str, out: Path) -> int:
     """Write the PDF and return its page count."""
-    from playwright.sync_api import sync_playwright
-
     out.parent.mkdir(parents=True, exist_ok=True)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            page.set_content(html, wait_until="load")
-            page.pdf(path=str(out), format="Letter", print_background=True, prefer_css_page_size=True)
-        finally:
-            browser.close()
+    if "pw" in _shared:
+        if "browser" not in _shared or not _shared["browser"].is_connected():
+            _shared["browser"] = _shared["pw"].chromium.launch()
+        _write_pdf(_shared["browser"], html, out)
+    else:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            try:
+                _write_pdf(browser, html, out)
+            finally:
+                browser.close()
     return len(PdfReader(out).pages)
 
 

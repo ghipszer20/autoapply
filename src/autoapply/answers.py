@@ -283,11 +283,11 @@ _MONTHS = ["January", "February", "March", "April", "May", "June", "July", "Augu
            "November", "December"]
 
 
-def _graduation(f, c, s, n):
-    grad = str(c.profile.get("education.expected_graduation"))  # e.g. "May 2028"
-    m = re.match(r"([A-Za-z]+)\s+(\d{4})", grad)
+def _month_year(f: FormField, n: str, text: str) -> Any:
+    """'May 2028' -> the month, the year, a date, or the whole string, depending on what the field asks for."""
+    m = re.match(r"([A-Za-z]+)\s+(\d{4})", text)
     if not m:
-        return grad
+        return text
     month, year = m.group(1), m.group(2)
     if "month" in n and "year" not in n:
         return Choice(month, (month, month[:3]))
@@ -295,7 +295,16 @@ def _graduation(f, c, s, n):
         return Choice(year, (year,))
     if f.type == "date":
         return f"{year}-{_MONTHS.index(month) + 1:02d}-15"
-    return Choice(grad, (grad, f"{month[:3]} {year}", year))
+    return Choice(text, (text, f"{month[:3]} {year}", year))
+
+
+def _graduation(f, c, s, n):
+    return _month_year(f, n, str(c.profile.get("education.expected_graduation")))
+
+
+def _edu_start(f, c, s, n):
+    start = c.profile.get("education.start")
+    return None if not start else _month_year(f, n, str(start))
 
 
 _TERM_STARTS = {"Summer 2027": None, "Spring 2027": "2027-01-11", "Winter 2027": "2027-01-04", "Fall 2027": "2027-08-30"}
@@ -393,6 +402,8 @@ STANDARD: list[Rule] = [
      lambda f, c, s, n: Choice("College Park, MD", ("College Park, MD", "College Park", "Maryland"))),
     (_r(r"year in school|class (standing|level|year)|academic (year|standing)|current year|year of study"),
      _class_standing),
+    (_r(r"education start|(school|university|college) start|enrollment start|start of (your )?(degree|studies)"),
+     _edu_start),
     (_r(r"school|university|college|institution"), _school),
     (_r(r"gpa|grade point"), _gpa),
     (_r(r"graduat|expected (completion|grad)|completion date"), _graduation),

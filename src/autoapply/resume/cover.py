@@ -23,7 +23,8 @@ SYSTEM = (
     "Write a concise internship cover letter (3 short paragraphs, under 250 words) for the candidate in RESUME, "
     "for the JOB. Use only facts from RESUME: never add skills, tools, numbers, metrics or experiences that are not "
     "there, and do not claim experience with the job's technologies unless RESUME shows it. Plain, specific, no "
-    "cliches. No greeting or sign-off lines; paragraphs only."
+    "cliches. Never state skill levels (proficient, expert, fluent, strong); name what was used and built. "
+    "No greeting or sign-off lines; paragraphs only."
 )
 
 
