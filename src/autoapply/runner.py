@@ -32,12 +32,11 @@ LOCK_STALE = timedelta(hours=2)
 
 def adapters() -> dict:
     out = {"greenhouse": GreenhouseAdapter(), "ashby": AshbyAdapter()}
-    try:
-        from .adapters.lever import LeverAdapter
+    from .adapters.lever import LeverAdapter
+    from .adapters.workday import WorkdayAdapter
 
-        out["lever"] = LeverAdapter()
-    except ImportError:
-        pass
+    out["lever"] = LeverAdapter()
+    out["workday"] = WorkdayAdapter()  # pilot: only used when "workday" is in run.ats_enabled or passed via --ats
     return out
 
 

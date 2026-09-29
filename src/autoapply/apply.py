@@ -51,6 +51,9 @@ def _audit(answers) -> dict[str, Any]:
 def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title: str, terms: tuple[str, ...],
               deps: ApplyDeps, live: bool, today: date | None = None) -> ApplyOutcome:
     today = today or date.today()
+    if hasattr(adapter, "apply_flow"):  # multi-page systems (Workday)
+        return _apply_flow(page, adapter, key=key, url=url, company=company, title=title, terms=terms, deps=deps,
+                           live=live, today=today)
     try:
         spec = adapter.load(page, url, key, company, title)
     except AdapterError as e:
@@ -88,6 +91,43 @@ def apply_one(page, adapter: Adapter, *, key: str, url: str, company: str, title
     page.screenshot(path=str(done), full_page=True)
     base["screenshot"] = str(done)
     return ApplyOutcome(result.status, result.detail, **base)
+
+
+def _apply_flow(page, adapter, *, key, url, company, title, terms, deps: ApplyDeps, live: bool,
+                today: date) -> ApplyOutcome:
+    shots = deps.screenshot_dir / today.isoformat()
+    shots.mkdir(parents=True, exist_ok=True)
+    cache: dict = {}
+
+    def screenshot(tag: str) -> str:
+        path = shots / f"{key.replace(':', '_')}_{tag}.png"
+        page.screenshot(path=str(path), full_page=True)
+        return str(path)
+
+    def answer(spec):
+        spec.meta["terms"] = terms
+        if "choice" not in cache:
+            cache["choice"] = choose_resume(deps.resume_settings, company=company, title=title,
+                                            description=spec.description, llm=deps.llm, today=today)
+
+        def cover(s):
+            return write_cover_letter(deps.llm, deps.master, company=company, title=title, description=s.description,
+                                      out_dir=deps.cover_dir, today=today) if deps.llm is not None else None
+
+        ctx = AnswerContext(profile=deps.profile, resume_pdf=cache["choice"].path, resume_text=deps.master_text,
+                            bank=deps.bank, llm=deps.llm, applied_before=deps.applied_before, cover_letter=cover,
+                            today=today)
+        return resolve(spec, ctx)
+
+    try:
+        out = adapter.apply_flow(page, url=url, key=key, company=company, title=title,
+                                 email=deps.profile.get("identity.email"), answer=answer, live=live,
+                                 screenshot=screenshot)
+    except AdapterError as e:
+        return ApplyOutcome("failed", f"flow: {e}")
+    resume = cache.get("choice")
+    return ApplyOutcome(out["status"], out.get("reason", ""), resume_path=str(resume.path) if resume else "",
+                        screenshot=out.get("screenshot", ""), answers=out.get("answers", {}), form_url=page.url)
 
 
 def outcome_json(o: ApplyOutcome) -> str:
