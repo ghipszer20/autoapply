@@ -122,8 +122,11 @@ def run_cycle(cfg: Config, conn: sqlite3.Connection, *, live: bool, limit: int |
         return rep
     last = db.get_state(conn, "last_discover")
     if discover_fn and (not last or now() - datetime.fromisoformat(last) > timedelta(hours=cfg.run.discover_every_hours)):
-        discover_fn()
-        rep.add("discovered new postings")
+        try:
+            discover_fn()
+            rep.add("discovered new postings")
+        except Exception as e:  # noqa: BLE001 - stale postings are still worth applying to
+            rep.add(f"discover failed ({type(e).__name__}: {str(e)[:120]}); using known postings")
     today = now().date()
     room = cfg.run.daily_cap - db.submitted_on(conn, today) if live else 10**6
     target = min(limit or cfg.run.per_cycle, room)

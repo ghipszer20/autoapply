@@ -53,3 +53,12 @@ def test_schedule_uses_pythonw():
     s = install_script(Path(r"C:\x\autoapply"))
     assert r"C:\x\autoapply\.venv\Scripts\pythonw.exe" in s and "-m autoapply run" in s
     assert "cmd.exe" not in s and "-WakeToRun" in s and "IgnoreNew" in s
+
+
+def test_discover_failure_does_not_abort(tmp_path):
+    conn = db.connect(tmp_path / "t.db")
+
+    def boom():
+        raise RuntimeError("network down")
+    rep = run_cycle(CFG, conn, live=False, now=lambda: NOW, discover_fn=boom)
+    assert any("discover failed" in line for line in rep.lines)

@@ -63,15 +63,24 @@ def _digest(conn: sqlite3.Connection, day) -> None:
 def _cmd_run(args, conn) -> int:
     from .runner import Locked, RunLock, discover_now, log_report, run_cycle
 
-    cfg = load_config(args.config)
+    from .runner import CycleReport
+
     live = not args.dry_run
     try:
+        cfg = load_config(args.config)
         with RunLock():
             rep = run_cycle(cfg, conn, live=live, limit=args.limit, ats=args.ats, headed=args.headed,
                             discover_fn=None if args.no_discover else (lambda: discover_now(cfg, conn)))
     except Locked as e:
         print(f"skipped: {e}")
         return 0
+    except Exception:  # noqa: BLE001 - under pythonw nobody sees stderr: the log is the only trace
+        import traceback
+
+        rep = CycleReport(status="crash", lines=traceback.format_exc().splitlines()[-12:])
+        log_report(rep, datetime.now().astimezone())
+        print("\n".join(rep.lines))
+        return 1
     path = log_report(rep, datetime.now().astimezone())
     print("\n".join(rep.lines) or rep.status)
     print(f"log: {path}")
