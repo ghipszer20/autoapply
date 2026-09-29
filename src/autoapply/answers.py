@@ -639,7 +639,9 @@ _FACT_KEYS = ("education", "availability", "preferences.relocate", "preferences.
 
 def _facts(c: AnswerContext) -> str:
     facts = {k: c.profile.get(k) for k in _FACT_KEYS if c.profile.get(k) not in (None, "pending")}
-    return f"RESUME:\n{c.resume_text.strip()}\n\nPROFILE:\n{json.dumps(facts, default=str, indent=1)}"
+    derived = "Available full-time (40 hours per week) during internship terms."  # summer dates are full-time
+    return (f"RESUME:\n{c.resume_text.strip()}\n\nPROFILE:\n{json.dumps(facts, default=str, indent=1)}\n"
+            f"DERIVED: {derived}")
 
 
 def _draft(spec: FormSpec, fields: list[FormField], c: AnswerContext) -> dict[str, DraftAnswer]:
@@ -666,6 +668,9 @@ def _accept_draft(f: FormField, d: DraftAnswer | None, allowed_text: str = "") -
     if f.type == "checkbox":
         return pick_bool([], True) == d.answer
     text = d.answer.strip()
+    if f.type == "number":  # "40 hours" -> "40"
+        m = re.search(r"\d+(?:\.\d+)?", text)
+        text = m.group(0) if m else ""
     if not text or (f.max_length and len(text) > f.max_length):
         return None
     if allowed_text and verify_text(allowed_text, text):  # invented number or technology
@@ -721,6 +726,10 @@ def resolve(spec: FormSpec, ctx: AnswerContext, *, rules_only: bool = False) -> 
                 deferred.append(f)  # generated only once the application is known to go ahead
                 return "deferred"
             return "done" if settle(f, _file_rule(f, ctx, spec, n), "file") else "failed"
+        if re.fullmatch(r"(please )?(select|choose)( one| all that apply| an option)?", n) and \
+                sum(bool(re.search(r"linkedin|indeed|glassdoor|handshake|career (fair|services)|website|referral|"
+                                   r"job board", norm(o))) for o in f.options) >= 2:
+            n = "how did you hear about us"  # label lost by the page; the options say what is asked
         # match the actual question first: a preamble ("not eligible for H-1B sponsorship.") must not decide
         # what "Are you authorized to work ... without sponsorship?" asks
         q = norm(question_part(f.label))

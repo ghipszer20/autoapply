@@ -449,3 +449,15 @@ def test_authorization_for_other_country_not_answered():
     assert not r.ok
     r2 = resolve(spec(F("a", "Are you authorized to work in the United States or Canada?", "select", options=YN)), ctx())
     assert r2.answers["a"].value == "Yes"
+
+
+def test_placeholder_label_with_source_options_is_how_heard():
+    opts = ("Company Website", "LinkedIn", "Glassdoor", "Indeed", "Other")
+    r = resolve(spec(F("h", "Select One", "radio", options=opts)), ctx())
+    assert r.answers["h"].value == "Other"
+
+
+def test_number_field_llm_answer_coerced():
+    llm = FakeLLM([DraftAnswer(id="n", answer="40 hours per week", confidence=0.9)])
+    r = resolve(spec(F("n", "How many hours per week can you work during the internship?", "number")), ctx(llm=llm))
+    assert r.answers["n"].value == "40"
