@@ -249,6 +249,14 @@ def _eeo(key: str) -> Callable:
     return rule
 
 
+def _lgbtq(f, c, s, n):
+    orientation = c.profile.get("eeo.sexual_orientation")
+    trans = c.profile.get("eeo.transgender")
+    if orientation is None or trans is None:
+        return UNANSWERABLE
+    return bool(trans) or str(orientation).lower() not in ("heterosexual", "straight")
+
+
 def _hispanic(f, c, s, n):
     v = c.profile.get("eeo.hispanic_or_latino")
     if v is None:
@@ -303,6 +311,7 @@ SENSITIVE: list[Rule] = [
      _authorized),
     (_r(r"citizen"), _citizen),
     (_r(r"sexual orientation"), _eeo("sexual_orientation")),
+    (_r(r"lgbt"), _lgbtq),
     (_r(r"transgender"), _eeo("transgender")),
     (_r(r"\bgender\b|\bsex\b"), _eeo("gender")),
     (_r(r"hispanic|latin[oax]"), _hispanic),
@@ -427,9 +436,33 @@ def _fmt_date(f: FormField, d: date | None) -> Any:
     return d.isoformat() if f.type == "date" else d.strftime("%m/%d/%Y")
 
 
+_STANDING = {  # years of school left after the academic year in question -> standing
+    0: ("Senior", ("senior", "fourth year", "4th year", "4", "undergraduate senior", "final year")),
+    1: ("Junior", ("junior", "third year", "3rd year", "3", "undergraduate junior")),
+    2: ("Sophomore", ("sophomore", "second year", "2nd year", "2", "undergraduate sophomore")),
+    3: ("Freshman", ("freshman", "first year", "1st year", "1", "undergraduate freshman")),
+}
+
+
+def _academic_year_end(n: str, today: date) -> int:
+    """The spring year that ends the academic year the question is about ('fall 2027' -> 2028)."""
+    if m := re.search(r"\b20\d\d (?:20)?(\d\d)\b", n):  # "2027-2028" / "2027-28" (norm turns '-' into ' ')
+        return 2000 + int(m.group(1))
+    if m := re.search(r"\b(fall|autumn|winter|spring|summer) (20\d\d)\b", n):
+        term, year = m.group(1), int(m.group(2))
+        return year + 1 if term in ("fall", "autumn", "summer") else year
+    return today.year + 1 if today.month >= 8 else today.year
+
+
 def _class_standing(f, c, s, n):
-    st = c.profile.get("education.class_standing")
-    cands = {"Junior": ("junior", "third year", "3rd year", "3", "undergraduate junior")}.get(st, (st,))
+    grad = re.search(r"(20\d\d)", str(c.profile.get("education.expected_graduation", "")))
+    if not grad:
+        st = c.profile.get("education.class_standing")
+        return Choice(st, (st,)) if st else None
+    left = int(grad.group(1)) - _academic_year_end(n, c.today)
+    if left not in _STANDING:
+        return None
+    st, cands = _STANDING[left]
     return Choice(st, cands)
 
 

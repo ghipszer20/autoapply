@@ -366,3 +366,19 @@ def test_llm_text_may_mention_posting_terms():
                                confidence=0.9)])
     r = resolve(spec(F("q", "Why this role?", "textarea"), description="We use Kafka and Python."), ctx(llm=llm))
     assert r.ok, r.skip_reason
+
+
+@pytest.mark.parametrize(("label", "want"), [
+    ("Current year in school", "Junior"),
+    ("What will your academic year be at the start of the Fall 2027 semester?", "Senior"),
+    ("Class standing for the 2027-2028 academic year", "Senior"),
+    ("Academic year in Spring 2027", "Junior"),
+])
+def test_class_standing_by_term(label, want):
+    r = resolve(spec(F("y", label, "select", options=("Freshman", "Sophomore", "Junior", "Senior"))), ctx())
+    assert r.answers["y"].value == want
+
+
+def test_lgbtq_from_profile():
+    r = resolve(spec(F("q", "Do you consider yourself member of the LGBTQIA+ community?", "select", options=YN)), ctx())
+    assert r.answers["q"].value == "No"

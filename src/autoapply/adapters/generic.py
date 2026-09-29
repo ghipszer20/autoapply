@@ -50,14 +50,37 @@ EXTRACT_JS = r"""
                 options: group.map(g => txt(g.labels && g.labels[0]) || g.value), optionIdx: group.map(g => g.dataset.aaIdx)});
       return;
     }
+    let label = labelOf(e);
+    if (e.type === 'file' && !/resume|cv|cover|transcript/i.test(label)) {  // upload widgets often have junk labels
+      let c = e.parentElement, found = '';
+      for (let i = 0; i < 6 && c && !found; i++, c = c.parentElement) {
+        const t = txt(c);
+        if (/cover letter/i.test(t) && !/resume|\bcv\b/i.test(t)) found = 'Cover letter';
+        else if (/resume|\bcv\b/i.test(t)) found = 'Resume';
+      }
+      label = found || label;
+    }
     out.push({id: 'i:' + e.dataset.aaIdx, kind: e.tagName === 'SELECT' ? 'select' : e.tagName === 'TEXTAREA' ? 'textarea' : e.type,
-              label: labelOf(e), required: e.required || e.getAttribute('aria-required') === 'true' || /\*\s*$/.test(labelOf(e)),
+              label: label, required: e.required || e.getAttribute('aria-required') === 'true' || /\*\s*$/.test(labelOf(e)),
               maxLength: e.maxLength > 0 ? e.maxLength : null,
               options: e.tagName === 'SELECT' ? [...e.options].map(o => o.text.trim()) : []});
   });
   return out;
 }
 """
+
+
+def dismiss_cookie_banner(page) -> None:
+    """Cookie banners cover Apply buttons; decline where possible, else accept (only necessary cookies matter)."""
+    for name in (r"^(decline|reject)( all)?$", r"^(accept|allow)( all)?( cookies)?$", r"^(ok|got it|i agree)$"):
+        btn = page.get_by_role("button", name=re.compile(name, re.I))
+        if btn.count():
+            try:
+                btn.first.click(timeout=3000)
+                page.wait_for_timeout(500)
+                return
+            except Exception:  # noqa: BLE001
+                continue
 
 
 def ats_for_host(host: str) -> str | None:
@@ -67,7 +90,7 @@ def ats_for_host(host: str) -> str | None:
 def build_spec(raw: list[dict], *, company: str, title: str, url: str, description: str) -> FormSpec:
     fields, kinds, option_idx = [], {}, {}
     for r in raw:
-        label = re.sub(r"\s*\*\s*$", "", r["label"] or "").strip()
+        label = re.sub(r"^\s*\*\s*|\s*\*\s*$", "", r["label"] or "").strip()
         if not label:
             continue
         kind = r["kind"]
@@ -96,6 +119,7 @@ class GenericAdapter:
     def load(self, page, url: str, key: str, company: str, title: str) -> FormSpec:
         page.goto(url, wait_until="domcontentloaded", timeout=60_000)
         settle(page)
+        dismiss_cookie_banner(page)
         description = page.inner_text("body")[:8000]
         if not page.query_selector("input[type=file], form input[type=email]"):
             apply = page.get_by_role("link", name=re.compile(r"^\s*apply", re.I)).or_(
